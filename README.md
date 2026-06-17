@@ -1,6 +1,28 @@
 # Differential Privacy in Machine Learning
 
-This repository demonstrates how to apply **differential privacy** techniques to a tabular health‑insurance dataset and measure the impact of privacy on downstream machine‑learning models.  It grew out of an academic project, but all institution specific content has been removed so that the work can be shared freely on GitHub.
+Quick Answer: DP-SGD achieves ε ≈ 2.13 (strict privacy) with ROC-AUC ≈ 0.993 on smoking classification. Feature-level noise unsuitable for privacy budgets below ε = 1.0.
+
+| Mechanism | Privacy Budget | Accuracy (ROC-AUC) | Recommendation |
+|-----------|---|---|---|
+| No privacy (baseline) | ∞ | 0.9948 | Reference only |
+| Feature Laplace | ε = 1.0 | 0.9780 | Only for loose privacy (ε > 1.0) |
+| Feature Gaussian | ε = 1.0 | 0.8586 | Not recommended |
+| **DP-SGD** | **ε = 2.13** | **0.9940** | **✓ Recommended** |
+
+**Key Insight:** Feature-level noise fails at strict privacy levels (ε < 1.0) because clipped numeric features have limited range; noise becomes dominant. DP-SGD, which adds noise during training, preserves signal through gradient averaging and is suitable for strict budgets.
+
+### 🏢 For Hiring Managers / Data Governance Teams
+This repository demonstrates:
+- **Rigorous DP implementation** — correct sensitivity calculations, privacy accounting, composition limits
+- **Privacy-utility tradeoff analysis** — quantified cost of privacy on model accuracy
+- **Fairness-aware thinking** — monitoring demographic parity under privacy constraints
+- **Reproducible ML practices** — tests, automated pipelines, transparent reporting
+
+### 👨‍💻 For ML Engineers
+Key technical insights:
+- **Why feature-level DP fails at low ε:** Clipping bounds sensitivity + per-feature noise amplification
+- **Why DP-SGD works better:** Noise added in gradient computation, averaged over batch
+- **How to set sensitivity:** Quantile-based clipping with L1 bounds
 
 For a deeper theoretical background on differential privacy concepts, see the
 [findings report](reports/findings_report.md).
