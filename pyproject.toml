@@ -39,7 +39,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=dp --cov-report=term --cov-report=html"
 pythonpath = ["src"]
 
 [tool.coverage.run]

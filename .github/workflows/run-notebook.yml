@@ -29,7 +29,7 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        pytest tests/ --cov=dp --cov-report=xml --cov-report=term
+        python -m pytest tests/ --cov=dp --cov-report=xml --cov-report=term
 
     - name: Display coverage
       run: echo "✓ Tests passed with coverage"
