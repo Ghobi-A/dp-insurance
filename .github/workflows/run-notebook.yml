@@ -1,0 +1,57 @@
+name: Run Notebook & Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.9", "3.10" ]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pytest pytest-cov
+
+    - name: Run tests with coverage
+      run: |
+        pytest tests/ --cov=dp --cov-report=xml --cov-report=term-simple
+
+    - name: Display coverage
+      run: echo "✓ Tests passed with coverage"
+
+  notebook:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[experimental]"
+        pip install jupyter nbconvert
+
+    - name: Execute notebook
+      run: jupyter nbconvert --to notebook --execute notebooks/dp_privacy_insurance.ipynb
+
+    - name: Success
+      run: echo "✓ Notebook executed successfully"
