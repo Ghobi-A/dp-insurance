@@ -3,7 +3,9 @@
 This module provides four DP mechanisms covering the most common use cases:
 
 - ``add_laplace_noise``      — ε-DP for numeric features (pure DP, no δ)
-- ``add_gaussian_noise``     — (ε, δ)-DP for numeric features (approximate DP)
+- ``add_gaussian_noise``     — (ε, δ)-DP for numeric features (approximate DP,
+                               calibrated with the analytic Gaussian mechanism)
+- ``calibrate_analytic_gaussian_sigma`` — minimal σ for (ε, δ)-DP Gaussian noise
 - ``randomized_response``    — local ε-DP for binary categorical values
 - ``apply_randomized_response`` — convenience wrapper for multiple columns
 - ``exponential_mechanism``  — ε-DP for discrete/categorical outputs
@@ -27,8 +29,75 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from scipy.stats import norm
 
 from .constants import get_rng
+
+
+def calibrate_analytic_gaussian_sigma(
+    epsilon: float,
+    delta: float,
+    sensitivity: float = 1.0,
+) -> float:
+    """Return the smallest σ giving (ε, δ)-DP for the Gaussian mechanism.
+
+    Uses the analytic Gaussian mechanism of Balle & Wang (2018), which
+    characterises (ε, δ)-DP for Gaussian noise exactly: N(0, σ²) noise on a
+    query with L2 sensitivity Δ is (ε, δ)-DP if and only if
+
+        Φ(Δ/(2σ) − εσ/Δ) − e^ε · Φ(−Δ/(2σ) − εσ/Δ) ≤ δ
+
+    where Φ is the standard normal CDF.  Unlike the classic bound
+    σ = Δ·√(2·ln(1.25/δ))/ε, this holds for *all* ε > 0 (the classic bound is
+    only valid for ε ≤ 1) and always yields equal or lower noise.
+
+    The smallest valid σ is found by bisection: the left-hand side is
+    monotonically decreasing in σ, so we expand an upper bracket until it
+    satisfies the condition and then bisect to relative precision ~1e-12.
+
+    Args:
+        epsilon: Privacy budget (ε > 0).
+        delta: Failure probability (0 < δ < 1).
+        sensitivity: L2 sensitivity of the query (Δ > 0).
+
+    Returns:
+        The minimal noise standard deviation σ satisfying (ε, δ)-DP.
+
+    Raises:
+        ValueError: If any parameter is out of range.
+
+    Reference:
+        Balle, B. & Wang, Y.-X. (2018). "Improving the Gaussian Mechanism for
+        Differential Privacy: Analytical Calibration and Optimal Denoising."
+        ICML 2018.
+    """
+    if epsilon <= 0:
+        raise ValueError("epsilon must be positive")
+    if not (0 < delta < 1):
+        raise ValueError("delta must be between 0 and 1")
+    if sensitivity <= 0:
+        raise ValueError("sensitivity must be positive")
+
+    def privacy_profile(sigma: float) -> float:
+        # δ achieved by N(0, σ²) noise at this ε (Balle & Wang, Theorem 8).
+        a = sensitivity / (2.0 * sigma)
+        b = epsilon * sigma / sensitivity
+        return norm.cdf(a - b) - np.exp(epsilon) * norm.cdf(-a - b)
+
+    # Bracket: expand hi until it satisfies the (ε, δ) condition.
+    hi = sensitivity
+    while privacy_profile(hi) > delta:
+        hi *= 2.0
+    lo = 0.0
+    for _ in range(200):
+        mid = (lo + hi) / 2.0
+        if mid <= 0.0 or privacy_profile(mid) > delta:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo <= 1e-12 * hi:
+            break
+    return hi
 
 
 def add_laplace_noise(
@@ -115,11 +184,14 @@ def add_gaussian_noise(
 ) -> pd.DataFrame:
     """Add Gaussian noise to all numeric columns, providing (ε, δ)-differential privacy.
 
-    Noise is drawn from N(0, σ²) where σ is derived from the analytic Gaussian
-    mechanism: σ = sensitivity · √(2 · ln(1.25/δ)) / ε.  This satisfies
-    (ε, δ)-DP, meaning privacy holds with probability 1 − δ.  For equal ε,
-    Gaussian noise has lower variance than Laplace in high dimensions (L2 vs
-    L1 sensitivity), but the δ failure probability must be accepted.
+    Noise is drawn from N(0, σ²) where σ is calibrated with the *analytic
+    Gaussian mechanism* (Balle & Wang 2018) — the exact characterisation of
+    (ε, δ)-DP for Gaussian noise.  This is valid for all ε > 0 and adds
+    strictly less noise than the classic bound
+    σ = sensitivity · √(2 · ln(1.25/δ)) / ε, which is only valid for ε ≤ 1.
+    For equal ε, Gaussian noise has lower variance than Laplace in high
+    dimensions (L2 vs L1 sensitivity), but the δ failure probability must be
+    accepted.
 
     When to use:
         - Numeric features where a small probability of privacy failure (δ) is
@@ -152,8 +224,10 @@ def add_gaussian_noise(
           is almost certainly too large for any production deployment.
         - Gaussian noise is not suitable when a pure DP guarantee is required
           (e.g. by regulation).  Use Laplace in that case.
-        - The σ formula used here is the classic analytic bound; tighter bounds
-          (e.g. from Balle & Wang 2018) can reduce noise for the same (ε, δ).
+        - σ is calibrated with :func:`calibrate_analytic_gaussian_sigma`
+          (Balle & Wang 2018), the tightest possible calibration for Gaussian
+          noise; earlier versions of this project used the classic bound,
+          which silently loses its guarantee for ε > 1.
         - Like Laplace, clip before calling and account for composition across
           multiple releases.
 
@@ -174,7 +248,7 @@ def add_gaussian_noise(
         raise ValueError("epsilon must be positive")
     if not (0 < delta < 1):
         raise ValueError("delta must be between 0 and 1")
-    sigma = sensitivity * np.sqrt(2 * np.log(1.25 / delta)) / epsilon
+    sigma = calibrate_analytic_gaussian_sigma(epsilon, delta, sensitivity)
     rng = get_rng(random_state)
     noisy = data.copy()
     num_cols = data.select_dtypes(include="number").columns

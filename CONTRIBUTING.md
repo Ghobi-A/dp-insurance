@@ -29,7 +29,7 @@ Coverage reports are written to `htmlcov/` automatically via `[tool.pytest.ini_o
 Open a GitHub issue with:
 - A minimal reproducible example.
 - The expected vs. actual behaviour.
-- Python version and relevant package versions (`pip show differential-privacy`).
+- Python version and relevant package versions (`pip show dp-insurance`).
 
 For security-relevant issues (e.g. a mechanism that does not satisfy its stated DP guarantee), please open a private advisory rather than a public issue.
 
