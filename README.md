@@ -1,30 +1,60 @@
 # Differential Privacy in Machine Learning
 
-**I revisited a project from 2024 and asked whether I would still trust my own methodology. The answer was no.**
+**I revisited a project from 2024 and asked whether I would still trust my own methodology. The answer was no — twice.**
 
-This repository contains a substantially revised version of my MSc dissertation work on differential privacy and machine learning. Revisiting the project with more experience revealed methodological issues in the original implementation, particularly around sensitivity calibration and privacy accounting.
+This repository contains a substantially revised version of my MSc dissertation work on differential privacy and machine learning. Revisiting the project with more experience revealed methodological issues in the original implementation — and a second audit of the revision found more: sensitivity mis-calibration that silently inflated feature-level DP results, a Gaussian mechanism whose classic calibration is invalid above ε = 1, clip bounds derived from the private data itself, and a fairness threshold tuned on the test set.
 
-Rather than treating the dissertation as finished, I rebuilt the pipeline with bounded sensitivity, leakage-safe preprocessing, ROC-AUC evaluation, formal privacy accounting, and Differentially Private Stochastic Gradient Descent (DP-SGD) via Opacus.
+The current version fixes all of these. The pipeline uses bounded sensitivity with honest joint-release accounting, fixed public domain bounds, the analytic Gaussian mechanism (Balle & Wang, 2018), leakage-safe preprocessing and thresholding, ROC-AUC evaluation, and Differentially Private Stochastic Gradient Descent (DP-SGD) via Opacus with formal privacy accounting. Every number below is produced by executing the notebook in CI.
 
-The result is a reproducible comparison of feature-level differential privacy mechanisms against modern training-time privacy techniques on a healthcare classification task.
+It then goes further than the original dissertation ever did: it stops *claiming* privacy and starts **verifying** it. The project now includes empirical privacy **auditing** (statistical lower bounds on ε), **membership-inference attacks** (LiRA and loss-threshold), and a **privacy–utility–fairness frontier** — the tools the DP-ML field uses to check that a stated ε is real. The headline engineering contribution: **the audit is wired into the test suite as a privacy regression test**, and it catches the exact guarantee-voiding bug (a DP-SGD loop that added no noise) that type checks and unit tests missed.
 
 ---
 
 ## Executive Summary
 
-| Mechanism                 | Privacy Budget | ROC-AUC | Recommendation                  |
-| ------------------------- | -------------- | ------- | ------------------------------- |
-| No Privacy (Baseline SVM) | ∞              | 0.9878  | Reference Only                  |
-| Feature Laplace (SVM)     | ε = 10.0       | 0.9680  | Viable at loose privacy budgets |
-| Feature Laplace (SVM)     | ε = 2.51       | 0.8910  | Moderate utility loss           |
-| Feature Gaussian (SVM)    | ε = 10.0       | 0.7560  | Not Recommended                 |
-| DP-SGD                    | ε ≈ 2.13       | 0.9940  | Recommended                     |
+| Mechanism | Privacy Budget | ROC-AUC | Recommendation |
+| --- | --- | --- | --- |
+| No Privacy (Baseline SVM) | ∞ | 0.9948 | Reference only |
+| Feature Laplace (SVM) | ε = 2.51 | 0.5327 | Near chance — not viable |
+| Feature Laplace (SVM) | ε = 10.0 | 0.6715 | Weak even at loose budgets |
+| Feature Gaussian (SVM) | ε = 10.0, δ = 1e-5 | 0.5301 | Not viable |
+| **DP-SGD** | **ε ≈ 2.13, δ = 1e-5** | **0.9940** | **Recommended** |
 
 ### Key Finding
 
-**The location of noise injection matters more than the quantity of noise.**
+**The location of noise injection matters far more than the quantity of noise.**
 
-Feature-level perturbation rapidly degrades utility as privacy budgets become stricter. DP-SGD maintains near-baseline performance while providing meaningful privacy guarantees because noise is injected into gradients rather than directly into features.
+With honest privacy accounting, feature-level perturbation on this task is close to random guessing at every commonly used privacy budget. DP-SGD maintains near-baseline performance at ε ≈ 2.13 because noise is injected into per-sample-clipped gradients — where batch averaging and training dynamics absorb it — rather than directly into features.
+
+### What the audit changed
+
+An earlier revision reported feature-level Laplace at 0.978 ROC-AUC. That number was an artifact of two calibration errors, both fixed here:
+
+1. **Sensitivity was the max column range (≈ 47,400 from `charges`), applied to every column.** The joint release of all numeric columns was not properly accounted, and one wide column dictated the noise on narrow ones. The pipeline now clips to fixed public bounds, rescales each column to [0, 1], and calibrates noise to the joint sensitivity of the full numeric row (L1 = d for Laplace, L2 = √d for Gaussian) — a single ε covers the whole release.
+2. **Clip bounds were quantiles of the private data**, leaking information outside the DP guarantee. Fixed, data-independent domain bounds are used instead.
+
+The corrected feature-level results are much worse — and that is the point: the original headline finding survives the audit only because DP-SGD's numbers were real, not because the feature-level baseline was fairly beaten.
+
+---
+
+## Verifying privacy (the novel contribution)
+
+Anyone can call a noise function; the open question in privacy-preserving ML is whether the stated ε actually holds once real code runs. This project answers it empirically. Full analysis in [`reports/empirical_privacy_report.md`](reports/empirical_privacy_report.md).
+
+**1. Empirical auditing — a statistical lower bound on ε.** Using the one-run auditor of Steinke, Nasr & Jagielski (NeurIPS 2023 Outstanding Paper), we insert membership canaries and invert the bound *(correct guesses ≤ `Binomial(r, e^ε/(e^ε+1))`)* to get a 95%-confidence lower bound on ε. A correct Laplace mechanism audits *below* its claim at every level (sound); the audit never over-states privacy.
+
+| Claimed ε | Empirical ε (95% lower bound) |
+| --- | --- |
+| 0.5 | 0.40 |
+| 1.0 | 0.78 |
+| 2.0 | 1.45 |
+| 4.0 | 2.68 |
+
+**2. Audit-as-regression-test — catching a real bug.** The audit runs in CI as an executable privacy contract. Pointed at a mechanism that forgets to add noise (the "unwrapped optimizer" bug from this project's own history), it reports ε ≥ 6.5 against a claimed ε = 1.0 and **fails the build** — a bug invisible to type checks and API-level unit tests.
+
+**3. Membership inference — practical leakage.** Judged by TPR at low FPR (Carlini et al., S&P 2022). Natural leakage on this task is near chance (the target is too separable to memorise), but injecting mislabelled canaries makes an overfit tree leak perfectly (AUC 1.0, TPR@1%FPR 1.0) — showing leakage tracks *memorisation*, not the presence of sensitive features. DP-SGD holds the attack at chance.
+
+**4. Privacy–fairness frontier.** Measuring demographic-parity and equalized-odds gaps *under* DP (not just on the baseline) exposes the "disparate impact of DP": heavy noise erases signal and apparent disparity together, and the group gap re-emerges only as utility returns.
 
 ---
 
@@ -33,8 +63,7 @@ Feature-level perturbation rapidly degrades utility as privacy budgets become st
 Differential Privacy is increasingly relevant in:
 
 * Healthcare analytics
-* AI governance
-* Responsible AI
+* AI governance and Responsible AI
 * Privacy-preserving machine learning
 * Regulatory compliance (GDPR, HIPAA)
 * Sensitive-data modelling
@@ -47,247 +76,145 @@ This project investigates the practical cost of privacy and evaluates whether mo
 
 This repository demonstrates:
 
-* Differential Privacy implementation and evaluation
-* Privacy-utility trade-off analysis
-* Fairness auditing and demographic parity monitoring
-* Reproducible ML workflows
-* Automated testing and CI/CD
-* Experimental design and statistical evaluation
-* Responsible AI thinking
-
----
+* Differential privacy implementation and evaluation, with mistakes found and corrected transparently
+* Privacy-utility trade-off analysis with honest accounting
+* Fairness auditing (demographic parity, equalized odds)
+* Reproducible ML workflows — the notebook and all reported numbers re-execute in CI
+* Automated testing (48 tests, including statistical calibration checks and DP-SGD integration tests)
 
 ### For ML Engineers
 
 Key technical lessons:
 
-* Why feature-level differential privacy struggles at low ε
-* Why sensitivity calibration matters
-* How clipping affects privacy guarantees
-* Why DP-SGD outperforms feature perturbation
-* Practical use of Opacus and privacy accounting
-* ROC-AUC evaluation under privacy constraints
-* Trade-offs between privacy, utility, and fairness
+* Why feature-level differential privacy fails at practical ε on tasks where signal concentrates in one feature
+* Why sensitivity must be accounted for the *joint* release, not per column
+* Why clip bounds must be data-independent
+* Why the classic Gaussian mechanism formula is invalid for ε > 1, and how the analytic Gaussian mechanism (Balle & Wang, 2018) fixes it
+* Practical use of Opacus, RDP accounting, and post-processing invariance
+* How threshold tuning on the test set silently corrupts fairness metrics
+* How to empirically **audit** a mechanism's ε and wire the audit into CI
+* Why membership-inference risk must be reported as TPR at low FPR, and why it tracks memorisation rather than ε alone
 
-For a deeper theoretical background on differential privacy concepts, see the findings report:
-
-`reports/findings_report.md`
-
----
-
-## Project Evolution
-
-This project began as an MSc dissertation submitted in 2024.
-
-The revised version introduces:
-
-* Correct sensitivity calibration through clipping and standardisation
-* Leakage-safe preprocessing
-* ROC-AUC as the primary evaluation metric
-* DP-SGD via Opacus
-* Formal privacy accounting
-* Fairness auditing
-* Automated testing
-* GitHub Actions CI/CD
-
-The accompanying paper documents the revised methodology and findings in detail.
+For the full analysis, see `reports/findings_report.md`, `reports/findings_summary.md`, and `reports/empirical_privacy_report.md`.
 
 ---
 
 ## Overview
 
-The included Jupyter notebook (`notebooks/dp_privacy_insurance.ipynb`) walks through the following steps:
+The Jupyter notebook (`notebooks/dp_privacy_insurance.ipynb`) walks through:
 
-### 1. Data Loading and Exploration
+1. **Data loading and exploration** — the public Health Insurance Cost dataset (1,338 records: age, sex, BMI, children, smoker, region, charges), with class-imbalance analysis.
+2. **Baseline models** — SVM and decision tree with leakage-safe preprocessing (transformers fit on the training partition only).
+3. **Feature-level DP** — Laplace (ε-DP) and Gaussian ((ε, δ)-DP) noise on numeric features, clipped to fixed public bounds and calibrated to the joint sensitivity of the full release; ROC-AUC swept across ε ∈ [0.01, 10].
+4. **DP-SGD** — a small neural network trained with Opacus across noise multipliers 0.5–2.0, with ε reported by the RDP accountant.
+5. **Fairness auditing** — demographic parity and equalized odds differences by sex, with the decision threshold tuned on training scores only.
+6. **Empirical privacy auditing** — one-run ε lower bounds, and a demonstration that the audit catches a no-noise implementation bug.
+7. **Membership inference** — natural and canary-based leakage, loss-threshold vs LiRA, scored by TPR at low FPR.
+8. **Privacy–utility–fairness frontier** — fairness gaps measured under DP across ε.
 
-We begin with a health insurance dataset containing:
+---
 
-* Age
-* Sex
-* BMI
-* Number of children
-* Smoker status
-* Region
-* Medical charges
+## Library
 
-Exploratory analysis is performed to understand feature distributions and relationships.
+Reusable components live in `src/dp/`:
 
-### 2. Differential Privacy Mechanisms
+| Module | Contents |
+| --- | --- |
+| `mechanisms.py` | Laplace, Gaussian (analytic calibration), randomized response, exponential mechanism |
+| `pipeline.py` | Dataset loading/splitting, leakage-safe preprocessing, clipping, bounded joint-release noise |
+| `dpsgd.py` | Opacus wrappers: private training loop, ε for a given noise multiplier via RDP accounting |
+| `audit.py` | Empirical ε lower bounds: one-run binomial (Steinke et al.) and Clopper–Pearson multi-run (Jagielski et al.); end-to-end mechanism auditor |
+| `attacks.py` | Membership inference: loss-threshold (Yeom et al.) and offline LiRA (Carlini et al.); TPR@low-FPR metrics |
+| `fairness.py` | Demographic parity and equalized odds differences (max−min across groups) |
+| `evaluation.py` | Privacy–utility sweeps and plotting |
 
-The project implements:
+Example — release all numeric columns under a single ε:
 
-* Laplace Mechanism
-* Gaussian Mechanism
-* Exponential Mechanism
-* Randomised Response
-* Differentially Private SGD (Opacus)
+```python
+import pandas as pd
+from dp import apply_bounded_feature_noise
 
-Noise functions accept a privacy budget (`epsilon`) and sensitivity parameters, computing required scales automatically.
+bounds = pd.DataFrame({
+    "lower": {"age": 18.0, "charges": 0.0},
+    "upper": {"age": 65.0, "charges": 65_000.0},
+})
+noisy = apply_bounded_feature_noise(df, bounds, mechanism="laplace", epsilon=1.0)
+```
 
-### 3. Sensitivity Calibration
+Example — audit a mechanism's *actual* ε (catches implementation bugs):
 
-Features are:
+```python
+import pandas as pd
+from dp import audit_scalar_mechanism, add_laplace_noise
 
-* Standardised
-* Clipped
-* Assigned bounded sensitivity
-
-This allows formal privacy guarantees and prevents unbounded noise calculations.
-
-### 4. Machine Learning Models
-
-The project evaluates:
-
-* Support Vector Machines (SVM)
-* Decision Trees
-* Neural Networks (DP-SGD)
-
-Models are compared under varying privacy budgets.
-
-### 5. Fairness Evaluation
-
-The project measures:
-
-* Demographic Parity Difference
-* Equalised Odds Difference
-
-to assess how privacy-preserving techniques interact with group fairness.
+result = audit_scalar_mechanism(
+    lambda x, rs: add_laplace_noise(
+        pd.DataFrame({"a": [x]}), epsilon=1.0, sensitivity=1.0, random_state=rs
+    ).iloc[0, 0],
+    num_guesses=5000,
+)
+print(result.epsilon_lower_bound)     # ~0.78: sound lower bound below the claim
+print(result.violates(epsilon_claim=1.0))  # False for correct code
+```
 
 ---
 
 ## Quickstart
 
-### 1. Clone the repository
-
 ```bash
 git clone https://github.com/Ghobi-A/dp-insurance.git
 cd dp-insurance
+pip install -e .                  # core (mechanisms, pipeline, fairness, evaluation)
+pip install -e ".[experimental]"  # + torch/Opacus for the DP-SGD section
+pip install -e ".[dev]"           # + pytest/jupyter
 ```
 
-### 2. Install dependencies
+The dataset (`data/insurance.csv`, the public Health Insurance Cost dataset) is included in the repository.
 
-```bash
-pip install -e .
-```
-
-### 3. Add the dataset
-
-Place:
-
-```text
-data/insurance.csv
-```
-
-in the repository root.
-
-The project uses the public Health Insurance Cost dataset.
-
-### 4. Run the notebook
+Run the notebook:
 
 ```bash
 jupyter notebook notebooks/dp_privacy_insurance.ipynb
+# or execute headlessly:
+jupyter nbconvert --to notebook --execute --inplace notebooks/dp_privacy_insurance.ipynb
 ```
 
-Or execute directly:
+Run the tests:
 
 ```bash
-jupyter nbconvert --to notebook --execute --inplace notebooks/dp_privacy_insurance.ipynb
+pytest
 ```
 
 ---
 
 ## Privacy Model and Guarantees
 
-This project implements formal Differential Privacy mechanisms.
+Threat model: re-identification, membership inference, and attribute inference attacks by an adversary who observes released features or the trained model.
 
-Threat model:
+Mechanisms implemented (`src/dp/mechanisms.py`):
 
-* Re-identification attacks
-* Membership inference attacks
-* Attribute inference attacks
+* **Laplace mechanism** — pure ε-DP for numeric features (L1 sensitivity).
+* **Gaussian mechanism** — (ε, δ)-DP, calibrated with the *analytic Gaussian mechanism* (Balle & Wang, 2018). Valid for all ε > 0 and strictly less noise than the classic σ = Δ·√(2·ln(1.25/δ))/ε bound, which only holds for ε ≤ 1.
+* **Randomized response** — ε-local-DP for binary categorical values.
+* **Exponential mechanism** — ε-DP selection from a discrete candidate set, computed in log-space for numerical stability.
+* **DP-SGD** (`src/dp/dpsgd.py`) — training-time (ε, δ)-DP via per-sample gradient clipping, Gaussian noise, and Opacus RDP accounting.
 
-Mechanisms implemented:
+Accounting conventions used throughout:
 
-### Laplace Mechanism
-
-Provides pure ε-Differential Privacy.
-
-### Gaussian Mechanism
-
-Provides (ε,δ)-Differential Privacy.
-
-### DP-SGD
-
-Provides training-time privacy using:
-
-* Gradient clipping
-* Gaussian noise injection
-* Privacy accounting via Opacus
-
-Privacy budgets are reported explicitly and evaluated against model utility.
-
-### Non-DP Baselines
-
-The repository also includes:
-
-* k-anonymity
-* l-diversity
-* t-closeness
-
-These should be treated as heuristic privacy techniques rather than formal privacy guarantees.
-
----
-
-## Exponential Mechanism
-
-The exponential mechanism (`exponential_mechanism` in `src/dp/mechanisms.py`) selects from a discrete candidate set with probability proportional to:
-
-```text
-exp(ε · utility / (2 · sensitivity))
-```
-
-The implementation:
-
-* Uses numerically stable log-space computation
-* Supports arbitrary utility functions
-* Is fully covered by the test suite
-
----
-
-## Pipeline Architecture
-
-Reusable pipeline components live in:
-
-```text
-src/dp/pipeline.py
-```
-
-These functions:
-
-* Load the dataset
-* Perform train-test splitting
-* Fit preprocessing transformers on training data only
-* Prevent data leakage
-* Construct reproducible evaluation pipelines
+* Feature-level noise is calibrated to the **joint sensitivity of the full numeric release** (all columns under one ε), not per-column budgets.
+* Clip bounds are **fixed and data-independent**; data-derived quantile bounds are supported (`compute_clip_bounds`) but explicitly documented as leaking outside the guarantee.
+* Threshold tuning and fairness metrics are **post-processing** and consume no additional budget.
 
 ---
 
 ## Continuous Integration
 
-GitHub Actions automatically:
+GitHub Actions (`.github/workflows/run-notebook.yml`) runs on every push and pull request:
 
-* Install dependencies
-* Execute tests
-* Run notebook validation
-* Verify pipeline integrity
+* Test suite with coverage across supported Python versions
+* Full end-to-end notebook execution (including DP-SGD via CPU torch + Opacus)
 
-Workflow definitions are located in:
-
-```text
-.github/workflows/
-```
-
-This ensures that all reported results remain reproducible.
+This ensures all reported results remain reproducible.
 
 ---
 
@@ -295,42 +222,16 @@ This ensures that all reported results remain reproducible.
 
 ```text
 dp-insurance/
-│
-├── notebooks/
-├── src/
-│   └── dp/
-├── tests/
-├── reports/
-├── data/
-├── .github/
-│   └── workflows/
-└── README.md
+├── notebooks/          # end-to-end analysis notebook (executed in CI)
+├── src/dp/             # reusable library (mechanisms, pipeline, dpsgd, audit, attacks, fairness, evaluation)
+├── tests/              # pytest suite
+├── reports/            # findings report + executive summary
+├── data/               # public insurance dataset
+└── .github/workflows/  # CI definitions
 ```
-
----
-
-## Removing Private Materials
-
-The original university submission and institution-specific materials are intentionally excluded from version control.
-
-If you add:
-
-* PDFs
-* Sensitive datasets
-* Private reports
-
-update `.gitignore` accordingly.
 
 ---
 
 ## License
 
-This project is licensed under the MIT License.
-
-See:
-
-```text
-LICENSE
-```
-
-for details.
+MIT — see `LICENSE`.

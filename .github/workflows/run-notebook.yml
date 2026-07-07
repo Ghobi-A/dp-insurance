@@ -11,28 +11,26 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ "3.9", "3.10" ]
+        python-version: [ "3.10", "3.11", "3.12" ]
 
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+        cache: pip
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e .
-        pip install pytest pytest-cov
+        # CPU-only torch keeps the install small; DP-SGD tests are skipped without it.
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install -e ".[experimental,dev]"
 
     - name: Run tests with coverage
-      run: |
-        python -m pytest tests/ --cov=dp --cov-report=xml --cov-report=term
-
-    - name: Display coverage
-      run: echo "✓ Tests passed with coverage"
+      run: python -m pytest tests/ --cov=dp --cov-report=xml --cov-report=term
 
   notebook:
     runs-on: ubuntu-latest
@@ -40,18 +38,16 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: "3.10"
+        python-version: "3.11"
+        cache: pip
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[experimental]"
-        pip install jupyter nbconvert
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install -e ".[experimental,dev]"
 
     - name: Execute notebook
       run: jupyter nbconvert --to notebook --execute notebooks/dp_privacy_insurance.ipynb
-
-    - name: Success
-      run: echo "✓ Notebook executed successfully"

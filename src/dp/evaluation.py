@@ -12,7 +12,13 @@ from sklearn.metrics import roc_auc_score, roc_curve
 
 from .mechanisms import add_gaussian_noise, add_laplace_noise
 from .models import build_model_registry
-from .pipeline import DatasetSplit, build_preprocessor, split_dataset
+from .pipeline import (
+    DatasetSplit,
+    apply_bounded_feature_noise,
+    build_preprocessor,
+    clip_numeric,
+    split_dataset,
+)
 
 
 @dataclass(frozen=True)
@@ -58,20 +64,41 @@ def evaluate_models(
     sensitivity: float = 1.0,
     random_state: int | None = None,
     models: dict[str, object] | None = None,
+    bounds: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, dict[str, tuple[np.ndarray, np.ndarray]]]:
-    """Train models on noised training data and return ROC-AUC scores."""
+    """Train models on noised training data and return ROC-AUC scores.
+
+    When ``bounds`` (per-column lower/upper clip bounds) is provided, noise is
+    calibrated via :func:`dp.pipeline.apply_bounded_feature_noise`, which
+    derives the joint sensitivity of the full numeric release automatically
+    and ignores the ``sensitivity`` argument.  Without ``bounds``, the raw
+    mechanisms are used and ``sensitivity`` must be the whole-row sensitivity
+    for the stated ``epsilon`` to be meaningful.
+    """
     models = models or build_model_registry()
-    noisy_train = _apply_noise(
-        split.X_train,
-        mechanism=mechanism,
-        epsilon=epsilon,
-        delta=delta,
-        sensitivity=sensitivity,
-        random_state=random_state,
-    )
+    if bounds is not None:
+        noisy_train = apply_bounded_feature_noise(
+            split.X_train,
+            bounds,
+            mechanism=mechanism,
+            epsilon=epsilon,
+            delta=delta,
+            random_state=random_state,
+        )
+        X_test_frame = clip_numeric(split.X_test, bounds)
+    else:
+        noisy_train = _apply_noise(
+            split.X_train,
+            mechanism=mechanism,
+            epsilon=epsilon,
+            delta=delta,
+            sensitivity=sensitivity,
+            random_state=random_state,
+        )
+        X_test_frame = split.X_test
     preprocessor = build_preprocessor(noisy_train)
     X_train = preprocessor.fit_transform(noisy_train)
-    X_test = preprocessor.transform(split.X_test)
+    X_test = preprocessor.transform(X_test_frame)
     y_train = _encode_labels(split.y_train)
     y_test = _encode_labels(split.y_test)
 
@@ -96,8 +123,13 @@ def privacy_utility_sweep(
     sensitivity: float = 1.0,
     random_state: int | None = None,
     models: dict[str, object] | None = None,
+    bounds: pd.DataFrame | None = None,
 ) -> SweepResult:
-    """Run a privacy-utility sweep across epsilon values."""
+    """Run a privacy-utility sweep across epsilon values.
+
+    See :func:`evaluate_models` for the meaning of ``bounds`` vs
+    ``sensitivity``.
+    """
     split = split_dataset(df, target=target)
     all_rows: list[pd.DataFrame] = []
     roc_curves: dict[str, dict[str, tuple[np.ndarray, np.ndarray]]] = {}
@@ -110,6 +142,7 @@ def privacy_utility_sweep(
             sensitivity=sensitivity,
             random_state=random_state,
             models=models,
+            bounds=bounds,
         )
         all_rows.append(scores)
         roc_curves[str(epsilon)] = roc_data

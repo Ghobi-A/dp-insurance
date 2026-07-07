@@ -66,16 +66,19 @@ def epsilon_for_noise_multiplier(
     steps: int,
     target_delta: float,
 ) -> float:
-    """Compute epsilon for a given noise multiplier using Opacus accounting."""
+    """Compute epsilon for a given noise multiplier using RDP accounting.
+
+    Uses Opacus's :class:`RDPAccountant` directly, replaying ``steps``
+    Poisson-subsampled Gaussian mechanism steps at the given
+    ``noise_multiplier`` and ``sample_rate``, then converting to (ε, δ)-DP.
+    """
     if not opacus_available():
         raise RuntimeError("Opacus and torch are required for DP-SGD utilities.")
-    privacy_engine = PrivacyEngine()
-    return privacy_engine.get_epsilon(
-        delta=target_delta,
-        noise_multiplier=noise_multiplier,
-        sample_rate=sample_rate,
-        steps=steps,
-    )
+    from opacus.accountants import RDPAccountant
+
+    accountant = RDPAccountant()
+    accountant.history = [(noise_multiplier, sample_rate, steps)]
+    return accountant.get_epsilon(delta=target_delta)
 
 
 def train_dp_sgd(
@@ -98,11 +101,13 @@ def train_dp_sgd(
         target_delta=target_delta,
         max_grad_norm=max_grad_norm,
     )
+    # Step the *wrapped* optimizer: stepping the original one would update the
+    # weights without per-sample clipping or noise, voiding the DP guarantee.
     for _ in range(epochs):
         for features, labels in setup.data_loader:
-            optimizer.zero_grad()
+            setup.optimizer.zero_grad()
             outputs = setup.model(features)
             loss = loss_fn(outputs, labels)
             loss.backward()
-            optimizer.step()
+            setup.optimizer.step()
     return setup
