@@ -6,6 +6,8 @@ This repository contains a substantially revised version of my MSc dissertation 
 
 The current version fixes all of these. The pipeline uses bounded sensitivity with honest joint-release accounting, fixed public domain bounds, the analytic Gaussian mechanism (Balle & Wang, 2018), leakage-safe preprocessing and thresholding, ROC-AUC evaluation, and Differentially Private Stochastic Gradient Descent (DP-SGD) via Opacus with formal privacy accounting. Every number below is produced by executing the notebook in CI.
 
+It then goes further than the original dissertation ever did: it stops *claiming* privacy and starts **verifying** it. The project now includes empirical privacy **auditing** (statistical lower bounds on ε), **membership-inference attacks** (LiRA and loss-threshold), and a **privacy–utility–fairness frontier** — the tools the DP-ML field uses to check that a stated ε is real. The headline engineering contribution: **the audit is wired into the test suite as a privacy regression test**, and it catches the exact guarantee-voiding bug (a DP-SGD loop that added no noise) that type checks and unit tests missed.
+
 ---
 
 ## Executive Summary
@@ -32,6 +34,27 @@ An earlier revision reported feature-level Laplace at 0.978 ROC-AUC. That number
 2. **Clip bounds were quantiles of the private data**, leaking information outside the DP guarantee. Fixed, data-independent domain bounds are used instead.
 
 The corrected feature-level results are much worse — and that is the point: the original headline finding survives the audit only because DP-SGD's numbers were real, not because the feature-level baseline was fairly beaten.
+
+---
+
+## Verifying privacy (the novel contribution)
+
+Anyone can call a noise function; the open question in privacy-preserving ML is whether the stated ε actually holds once real code runs. This project answers it empirically. Full analysis in [`reports/empirical_privacy_report.md`](reports/empirical_privacy_report.md).
+
+**1. Empirical auditing — a statistical lower bound on ε.** Using the one-run auditor of Steinke, Nasr & Jagielski (NeurIPS 2023 Outstanding Paper), we insert membership canaries and invert the bound *(correct guesses ≤ `Binomial(r, e^ε/(e^ε+1))`)* to get a 95%-confidence lower bound on ε. A correct Laplace mechanism audits *below* its claim at every level (sound); the audit never over-states privacy.
+
+| Claimed ε | Empirical ε (95% lower bound) |
+| --- | --- |
+| 0.5 | 0.40 |
+| 1.0 | 0.78 |
+| 2.0 | 1.45 |
+| 4.0 | 2.68 |
+
+**2. Audit-as-regression-test — catching a real bug.** The audit runs in CI as an executable privacy contract. Pointed at a mechanism that forgets to add noise (the "unwrapped optimizer" bug from this project's own history), it reports ε ≥ 6.5 against a claimed ε = 1.0 and **fails the build** — a bug invisible to type checks and API-level unit tests.
+
+**3. Membership inference — practical leakage.** Judged by TPR at low FPR (Carlini et al., S&P 2022). Natural leakage on this task is near chance (the target is too separable to memorise), but injecting mislabelled canaries makes an overfit tree leak perfectly (AUC 1.0, TPR@1%FPR 1.0) — showing leakage tracks *memorisation*, not the presence of sensitive features. DP-SGD holds the attack at chance.
+
+**4. Privacy–fairness frontier.** Measuring demographic-parity and equalized-odds gaps *under* DP (not just on the baseline) exposes the "disparate impact of DP": heavy noise erases signal and apparent disparity together, and the group gap re-emerges only as utility returns.
 
 ---
 
@@ -69,8 +92,10 @@ Key technical lessons:
 * Why the classic Gaussian mechanism formula is invalid for ε > 1, and how the analytic Gaussian mechanism (Balle & Wang, 2018) fixes it
 * Practical use of Opacus, RDP accounting, and post-processing invariance
 * How threshold tuning on the test set silently corrupts fairness metrics
+* How to empirically **audit** a mechanism's ε and wire the audit into CI
+* Why membership-inference risk must be reported as TPR at low FPR, and why it tracks memorisation rather than ε alone
 
-For the full analysis, see `reports/findings_report.md` and `reports/findings_summary.md`.
+For the full analysis, see `reports/findings_report.md`, `reports/findings_summary.md`, and `reports/empirical_privacy_report.md`.
 
 ---
 
@@ -83,6 +108,9 @@ The Jupyter notebook (`notebooks/dp_privacy_insurance.ipynb`) walks through:
 3. **Feature-level DP** — Laplace (ε-DP) and Gaussian ((ε, δ)-DP) noise on numeric features, clipped to fixed public bounds and calibrated to the joint sensitivity of the full release; ROC-AUC swept across ε ∈ [0.01, 10].
 4. **DP-SGD** — a small neural network trained with Opacus across noise multipliers 0.5–2.0, with ε reported by the RDP accountant.
 5. **Fairness auditing** — demographic parity and equalized odds differences by sex, with the decision threshold tuned on training scores only.
+6. **Empirical privacy auditing** — one-run ε lower bounds, and a demonstration that the audit catches a no-noise implementation bug.
+7. **Membership inference** — natural and canary-based leakage, loss-threshold vs LiRA, scored by TPR at low FPR.
+8. **Privacy–utility–fairness frontier** — fairness gaps measured under DP across ε.
 
 ---
 
@@ -95,6 +123,8 @@ Reusable components live in `src/dp/`:
 | `mechanisms.py` | Laplace, Gaussian (analytic calibration), randomized response, exponential mechanism |
 | `pipeline.py` | Dataset loading/splitting, leakage-safe preprocessing, clipping, bounded joint-release noise |
 | `dpsgd.py` | Opacus wrappers: private training loop, ε for a given noise multiplier via RDP accounting |
+| `audit.py` | Empirical ε lower bounds: one-run binomial (Steinke et al.) and Clopper–Pearson multi-run (Jagielski et al.); end-to-end mechanism auditor |
+| `attacks.py` | Membership inference: loss-threshold (Yeom et al.) and offline LiRA (Carlini et al.); TPR@low-FPR metrics |
 | `fairness.py` | Demographic parity and equalized odds differences (max−min across groups) |
 | `evaluation.py` | Privacy–utility sweeps and plotting |
 
@@ -109,6 +139,22 @@ bounds = pd.DataFrame({
     "upper": {"age": 65.0, "charges": 65_000.0},
 })
 noisy = apply_bounded_feature_noise(df, bounds, mechanism="laplace", epsilon=1.0)
+```
+
+Example — audit a mechanism's *actual* ε (catches implementation bugs):
+
+```python
+import pandas as pd
+from dp import audit_scalar_mechanism, add_laplace_noise
+
+result = audit_scalar_mechanism(
+    lambda x, rs: add_laplace_noise(
+        pd.DataFrame({"a": [x]}), epsilon=1.0, sensitivity=1.0, random_state=rs
+    ).iloc[0, 0],
+    num_guesses=5000,
+)
+print(result.epsilon_lower_bound)     # ~0.78: sound lower bound below the claim
+print(result.violates(epsilon_claim=1.0))  # False for correct code
 ```
 
 ---
@@ -177,7 +223,7 @@ This ensures all reported results remain reproducible.
 ```text
 dp-insurance/
 ├── notebooks/          # end-to-end analysis notebook (executed in CI)
-├── src/dp/             # reusable library (mechanisms, pipeline, dpsgd, fairness, evaluation)
+├── src/dp/             # reusable library (mechanisms, pipeline, dpsgd, audit, attacks, fairness, evaluation)
 ├── tests/              # pytest suite
 ├── reports/            # findings report + executive summary
 ├── data/               # public insurance dataset

@@ -39,3 +39,7 @@ For security-relevant issues (e.g. a mechanism that does not satisfy its stated 
 - Abadi et al. (2016). *Deep Learning with Differential Privacy.* — DP-SGD and the moments accountant.
 - Balle & Wang (2018). *Improving the Gaussian Mechanism for Differential Privacy.* — tighter σ bounds than the classical formula.
 - Erlingsson et al. (2014). *RAPPOR: Randomized Aggregatable Privacy-Preserving Ordinal Response.* — local DP and randomized response at scale.
+- Steinke, Nasr & Jagielski (2023). *Privacy Auditing with One (1) Training Run.* — the one-run auditing bound in `src/dp/audit.py`.
+- Jagielski, Ullman & Oprea (2020). *Auditing Differentially Private Machine Learning.* — Clopper–Pearson multi-run auditing.
+- Carlini et al. (2022). *Membership Inference Attacks From First Principles.* — LiRA and the TPR@low-FPR metric in `src/dp/attacks.py`.
+- Bagdasaryan, Poursaeed & Shmatikov (2019). *Differential Privacy Has Disparate Impact on Model Accuracy.* — the privacy–fairness interaction.
