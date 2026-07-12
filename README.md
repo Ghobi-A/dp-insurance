@@ -56,6 +56,8 @@ Anyone can call a noise function; the open question in privacy-preserving ML is 
 
 **4. Privacy–fairness frontier.** Measuring demographic-parity and equalized-odds gaps *under* DP (not just on the baseline) exposes the "disparate impact of DP": heavy noise erases signal and apparent disparity together, and the group gap re-emerges only as utility returns.
 
+**5. Stress-testing the ε ≈ 2.13 claim.** We then tried to *break* the DP-SGD headline rather than re-confirm it: a stronger (online) LiRA with more shadow models and an adversary that doesn't know the target's model class, plus worst-case canary constructions (feature-space outliers, duplicated records) fed through a one-run audit of the DP-SGD model itself. The claim **held** — no attack produced an audited ε lower bound above 2.13 — but §5 of the report says plainly what this does and does not show: on a 1,070-row dataset with a small MLP the one-run auditor is too weak to certify ε as low as 2.13 even against a *no-noise* model, so "not broken" is not "verified." The audit's power is demonstrated separately on a learner that genuinely memorises.
+
 ---
 
 ## Why This Project Matters
@@ -80,7 +82,7 @@ This repository demonstrates:
 * Privacy-utility trade-off analysis with honest accounting
 * Fairness auditing (demographic parity, equalized odds)
 * Reproducible ML workflows — the notebook and all reported numbers re-execute in CI
-* Automated testing (48 tests, including statistical calibration checks and DP-SGD integration tests)
+* Automated testing (81 tests, including statistical calibration checks, DP-SGD integration tests, and a strengthened one-run audit that catches a memorising learner)
 
 ### For ML Engineers
 
@@ -123,8 +125,9 @@ Reusable components live in `src/dp/`:
 | `mechanisms.py` | Laplace, Gaussian (analytic calibration), randomized response, exponential mechanism |
 | `pipeline.py` | Dataset loading/splitting, leakage-safe preprocessing, clipping, bounded joint-release noise |
 | `dpsgd.py` | Opacus wrappers: private training loop, ε for a given noise multiplier via RDP accounting |
-| `audit.py` | Empirical ε lower bounds: one-run binomial (Steinke et al.) and Clopper–Pearson multi-run (Jagielski et al.); end-to-end mechanism auditor |
-| `attacks.py` | Membership inference: loss-threshold (Yeom et al.) and offline LiRA (Carlini et al.); TPR@low-FPR metrics |
+| `audit.py` | Empirical ε lower bounds: one-run binomial (Steinke et al.) and Clopper–Pearson multi-run (Jagielski et al.); end-to-end scalar auditor and a one-run auditor for trained models (`one_run_model_audit`) |
+| `attacks.py` | Membership inference: loss-threshold (Yeom et al.), offline **and online** LiRA (Carlini et al.); TPR@low-FPR metrics |
+| `canaries.py` | Canary constructions for auditing: label-flip, feature-space outlier, and duplicated (group) probes |
 | `fairness.py` | Demographic parity and equalized odds differences (max−min across groups) |
 | `evaluation.py` | Privacy–utility sweeps and plotting |
 

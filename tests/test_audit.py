@@ -13,12 +13,16 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.tree import DecisionTreeClassifier
 
 from dp.audit import (
+    audit_membership_scores,
     audit_scalar_mechanism,
     epsilon_lower_bound_binomial,
     epsilon_lower_bound_clopper_pearson,
+    one_run_model_audit,
 )
+from dp.canaries import make_label_flip_canaries
 from dp.mechanisms import add_laplace_noise
 
 
@@ -158,3 +162,117 @@ def test_audit_detects_undernoised_mechanism():
         random_state=1,
     )
     assert actual.violates(epsilon_claim=claimed)
+
+
+# --- one-run auditor from membership scores -------------------------------
+
+def test_audit_membership_scores_perfect_separation_is_large():
+    # A score that ranks every member above every non-member => all guesses
+    # correct => a large lower bound, just like the scalar no-noise audit.
+    rng = np.random.default_rng(0)
+    included = rng.integers(0, 2, size=1000)
+    scores = included + rng.normal(0, 1e-3, size=1000)  # perfectly ordered
+    result = audit_membership_scores(scores, included)
+    assert result.epsilon_lower_bound > 2.5
+
+
+def test_audit_membership_scores_chance_is_zero():
+    # Scores independent of membership => attacker at chance => bound is 0.
+    rng = np.random.default_rng(1)
+    included = rng.integers(0, 2, size=2000)
+    scores = rng.normal(0, 1, size=2000)
+    result = audit_membership_scores(scores, included)
+    assert result.epsilon_lower_bound == 0.0
+
+
+def test_audit_membership_scores_abstention_reports_budget():
+    # guess_fraction commits guesses on the most confident subset only.
+    rng = np.random.default_rng(2)
+    included = rng.integers(0, 2, size=1000)
+    scores = included + rng.normal(0, 1e-3, size=1000)
+    result = audit_membership_scores(scores, included, guess_fraction=0.4)
+    assert result.details["guess_fraction"] == 0.4
+    assert result.num_guesses == 2 * int(0.4 * 1000 / 2)
+
+
+def test_audit_membership_scores_validation():
+    with pytest.raises(ValueError, match="same length"):
+        audit_membership_scores(np.zeros(5), np.zeros(4))
+    with pytest.raises(ValueError, match="binary"):
+        audit_membership_scores(np.zeros(5), np.full(5, 2))
+    with pytest.raises(ValueError, match="guess_fraction"):
+        audit_membership_scores(np.zeros(6), np.zeros(6), guess_fraction=0.0)
+    with pytest.raises(ValueError, match="too few"):
+        audit_membership_scores(np.array([0.0]), np.array([1]))
+
+
+# --- one-run model audit: the strengthened privacy regression test --------
+
+def _blobs(n, d, sep, seed):
+    """Two well-separated Gaussian blobs; a learner predicts the true label."""
+    rng = np.random.default_rng(seed)
+    half = n // 2
+    features = np.vstack([
+        rng.normal(-sep, 1.0, size=(half, d)),
+        rng.normal(sep, 1.0, size=(half, d)),
+    ])
+    labels = np.concatenate([np.zeros(half), np.ones(half)]).astype(int)
+    return features, labels
+
+
+def _bce(y_true, prob):
+    prob = np.clip(prob, 1e-7, 1 - 1e-7)
+    return -(y_true * np.log(prob) + (1 - y_true) * np.log(1 - prob))
+
+
+def test_one_run_audit_catches_memorising_learner():
+    # The strengthened auditor, run against a NON-private learner that
+    # memorises mislabelled canaries, must certify a large ε lower bound — the
+    # model-level analogue of the scalar no-noise regression test. A private
+    # model that stopped memorising would drive this bound to ~0, so the
+    # assertion is a live privacy contract, not a tautology.
+    base_x, base_y = _blobs(600, 8, sep=3.0, seed=1)
+    pool_x, pool_y = _blobs(400, 8, sep=3.0, seed=101)
+    canaries = make_label_flip_canaries(pool_x, pool_y, 300, random_state=1)
+
+    def train_and_score(x_aug, y_aug, canary_features):
+        tree = DecisionTreeClassifier(random_state=0).fit(x_aug, y_aug)
+        return -_bce(canaries.labels, tree.predict_proba(canary_features)[:, 1])
+
+    result = one_run_model_audit(
+        canaries, base_x, base_y, train_and_score,
+        delta=0.0, guess_fraction=0.5, random_state=1,
+    )
+    assert result.epsilon_lower_bound > 1.5
+    assert result.violates(epsilon_claim=1.0)
+    assert result.details["canary_kind"] == "label-flip"
+
+
+def test_one_run_audit_chance_attack_is_zero():
+    # The SAME canaries and base data, but a scorer that ignores membership,
+    # must not manufacture leakage: a sound audit reports ~0.
+    base_x, base_y = _blobs(600, 8, sep=3.0, seed=1)
+    pool_x, pool_y = _blobs(400, 8, sep=3.0, seed=101)
+    canaries = make_label_flip_canaries(pool_x, pool_y, 300, random_state=1)
+    noise = np.random.default_rng(7)
+
+    def train_and_score(x_aug, y_aug, canary_features):
+        return noise.standard_normal(canary_features.shape[0])
+
+    result = one_run_model_audit(
+        canaries, base_x, base_y, train_and_score,
+        delta=0.0, guess_fraction=0.5, random_state=1,
+    )
+    assert result.epsilon_lower_bound == 0.0
+
+
+def test_one_run_model_audit_validates_score_length():
+    base_x, base_y = _blobs(200, 4, sep=2.0, seed=0)
+    pool_x, pool_y = _blobs(100, 4, sep=2.0, seed=9)
+    canaries = make_label_flip_canaries(pool_x, pool_y, 40, random_state=0)
+    with pytest.raises(ValueError, match="one score per canary"):
+        one_run_model_audit(
+            canaries, base_x, base_y,
+            lambda x_aug, y_aug, cf: np.zeros(cf.shape[0] - 1),
+            random_state=0,
+        )
