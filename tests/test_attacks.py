@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from dp.attacks import lira_offline_attack, loss_threshold_attack
+from dp.attacks import lira_offline_attack, lira_online_attack, loss_threshold_attack
 
 
 def test_loss_threshold_detects_separation():
@@ -61,3 +61,38 @@ def test_lira_offline_shape_validation():
         )
     with pytest.raises(ValueError, match="k >= 2"):
         lira_offline_attack(np.zeros(5), np.zeros(5), np.zeros((5, 1)))
+
+
+def test_lira_online_beats_offline_when_in_distribution_is_informative():
+    # Construct a case where the "in" distribution carries signal the offline
+    # attack (out-only) cannot use: members' losses are drawn from a tight "in"
+    # Gaussian well below a wide "out" Gaussian, and per-example difficulty
+    # shifts both, so modelling the in-distribution sharpens the test.
+    rng = np.random.default_rng(3)
+    n, k = 500, 32
+    difficulty = rng.normal(1.5, 0.6, size=n).clip(min=0.2)
+    membership = rng.integers(0, 2, size=n)
+    shadow_in = rng.normal((difficulty - 0.8)[:, None], 0.1, size=(n, k)).clip(min=0)
+    shadow_out = rng.normal(difficulty[:, None], 0.4, size=(n, k)).clip(min=0)
+    # Target losses come from the matching distribution for each example.
+    target = np.where(
+        membership == 1,
+        rng.normal(difficulty - 0.8, 0.1),
+        rng.normal(difficulty, 0.4),
+    ).clip(min=0)
+
+    online = lira_online_attack(target, membership, shadow_in, shadow_out)
+    offline = lira_offline_attack(target, membership, shadow_out)
+    assert online.method == "lira-online"
+    assert online.auc > 0.5
+    # Using the in-distribution should not hurt, and here it helps.
+    assert online.auc >= offline.auc - 0.02
+
+
+def test_lira_online_shape_validation():
+    with pytest.raises(ValueError, match="align"):
+        lira_online_attack(np.zeros(5), np.zeros(4), np.zeros((5, 8)), np.zeros((5, 8)))
+    with pytest.raises(ValueError, match="shadow_in_losses"):
+        lira_online_attack(np.zeros(5), np.zeros(5), np.zeros((5, 1)), np.zeros((5, 8)))
+    with pytest.raises(ValueError, match="shadow_out_losses"):
+        lira_online_attack(np.zeros(5), np.zeros(5), np.zeros((5, 8)), np.zeros((5, 1)))

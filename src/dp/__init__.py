@@ -1,11 +1,24 @@
 """Differential privacy tooling for the insurance dataset."""
 
-from .attacks import AttackResult, lira_offline_attack, loss_threshold_attack
+from .attacks import (
+    AttackResult,
+    lira_offline_attack,
+    lira_online_attack,
+    loss_threshold_attack,
+)
 from .audit import (
     AuditResult,
+    audit_membership_scores,
     audit_scalar_mechanism,
     epsilon_lower_bound_binomial,
     epsilon_lower_bound_clopper_pearson,
+    one_run_model_audit,
+)
+from .canaries import (
+    CanarySet,
+    make_duplicated_canaries,
+    make_feature_outlier_canaries,
+    make_label_flip_canaries,
 )
 from .constants import RANDOM_STATE
 from .evaluation import plot_privacy_utility, plot_roc_curves, privacy_utility_sweep
@@ -32,10 +45,12 @@ __all__ = [
     "RANDOM_STATE",
     "AttackResult",
     "AuditResult",
+    "CanarySet",
     "add_gaussian_noise",
     "add_laplace_noise",
     "apply_bounded_feature_noise",
     "apply_randomized_response",
+    "audit_membership_scores",
     "audit_scalar_mechanism",
     "calibrate_analytic_gaussian_sigma",
     "clip_numeric",
@@ -46,7 +61,12 @@ __all__ = [
     "equalized_odds_difference",
     "exponential_mechanism",
     "lira_offline_attack",
+    "lira_online_attack",
     "loss_threshold_attack",
+    "make_duplicated_canaries",
+    "make_feature_outlier_canaries",
+    "make_label_flip_canaries",
+    "one_run_model_audit",
     "build_decision_tree_model",
     "build_model_registry",
     "build_svm_model",

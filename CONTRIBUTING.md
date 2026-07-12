@@ -41,5 +41,6 @@ For security-relevant issues (e.g. a mechanism that does not satisfy its stated 
 - Erlingsson et al. (2014). *RAPPOR: Randomized Aggregatable Privacy-Preserving Ordinal Response.* — local DP and randomized response at scale.
 - Steinke, Nasr & Jagielski (2023). *Privacy Auditing with One (1) Training Run.* — the one-run auditing bound in `src/dp/audit.py`.
 - Jagielski, Ullman & Oprea (2020). *Auditing Differentially Private Machine Learning.* — Clopper–Pearson multi-run auditing.
-- Carlini et al. (2022). *Membership Inference Attacks From First Principles.* — LiRA and the TPR@low-FPR metric in `src/dp/attacks.py`.
+- Carlini et al. (2022). *Membership Inference Attacks From First Principles.* — offline/online LiRA and the TPR@low-FPR metric in `src/dp/attacks.py`.
+- Nasr et al. (2021). *Adversary Instantiation: Lower Bounds for Differentially Private Machine Learning.* — worst-case canary design behind `src/dp/canaries.py`.
 - Bagdasaryan, Poursaeed & Shmatikov (2019). *Differential Privacy Has Disparate Impact on Model Accuracy.* — the privacy–fairness interaction.

@@ -37,6 +37,8 @@ from typing import Callable
 import numpy as np
 from scipy import optimize, stats
 
+from .canaries import CanarySet
+
 
 @dataclass(frozen=True)
 class AuditResult:
@@ -225,6 +227,79 @@ def epsilon_lower_bound_clopper_pearson(
     )
 
 
+def audit_membership_scores(
+    scores: np.ndarray,
+    included: np.ndarray,
+    delta: float = 0.0,
+    confidence: float = 0.95,
+    guess_fraction: float = 1.0,
+) -> AuditResult:
+    """One-run ε lower bound from real-valued membership scores.
+
+    This generalises :func:`audit_scalar_mechanism` from a scalar sampler to any
+    attack that emits a per-canary membership *score* (higher = more member-like)
+    against known inclusion labels — for instance the loss of each canary under
+    a single trained model, or a LiRA statistic.  It is the auditing side of the
+    membership-inference attacks in :mod:`dp.attacks`: strengthen the attack, run
+    it against canaries whose inclusion you control, and this turns the result
+    into a lower bound on ε.
+
+    Following Steinke et al. (2023), the auditor commits a hard guess only where
+    it is most confident: it sorts by score, guesses "in" for the top ``k`` and
+    "out" for the bottom ``k`` (``k = ⌊guess_fraction · m / 2⌋``, abstaining on
+    the middle), counts correct guesses, and feeds ``(correct, 2k)`` to
+    :func:`epsilon_lower_bound_binomial`.  The guessing rule depends only on the
+    scores, never on the inclusion labels, so the binomial bound applies.
+
+    Args:
+        scores: Shape ``(m,)``. Membership score per canary (higher = more
+            member-like).
+        included: Shape ``(m,)``. 1 if the canary was in training, else 0.
+        delta: δ of the (ε, δ)-DP claim being audited.
+        confidence: Confidence level 1 − β for the lower bound.
+        guess_fraction: Fraction of canaries to commit guesses on, split evenly
+            between the most and least member-like.  1.0 guesses on all of them;
+            a smaller value trades coverage for a more confident subset.
+
+    Returns:
+        An :class:`AuditResult` from the binomial one-run estimator, with the
+        realised guessing budget and attacker accuracy in ``details``.
+
+    Raises:
+        ValueError: On shape mismatch, non-binary ``included``, a
+            ``guess_fraction`` outside ``(0, 1]``, or too few canaries to commit
+            even a single in/out guess pair.
+    """
+    scores = np.asarray(scores, dtype=float)
+    included = np.asarray(included)
+    if scores.shape != included.shape or scores.ndim != 1:
+        raise ValueError("scores and included must be 1-D arrays of the same length")
+    if not set(np.unique(included)).issubset({0, 1}):
+        raise ValueError("included must be binary (0/1)")
+    if not (0.0 < guess_fraction <= 1.0):
+        raise ValueError("guess_fraction must be in (0, 1]")
+
+    m = scores.shape[0]
+    k = int(np.floor(guess_fraction * m / 2.0))
+    if k < 1:
+        raise ValueError("too few canaries to commit an in/out guess pair")
+
+    order = np.argsort(scores)  # ascending: low score = out-like, high = in-like
+    out_idx = order[:k]
+    in_idx = order[m - k:]
+    correct = int((included[in_idx] == 1).sum() + (included[out_idx] == 0).sum())
+
+    result = epsilon_lower_bound_binomial(
+        num_correct=correct,
+        num_guesses=2 * k,
+        delta=delta,
+        confidence=confidence,
+    )
+    result.details["guess_fraction"] = guess_fraction
+    result.details["num_canaries"] = m
+    return result
+
+
 def audit_scalar_mechanism(
     mechanism: Callable[[float, int | None], float],
     value_in: float = 1.0,
@@ -287,3 +362,77 @@ def audit_scalar_mechanism(
         delta=delta,
         confidence=confidence,
     )
+
+
+def one_run_model_audit(
+    canaries: CanarySet,
+    base_features: np.ndarray,
+    base_labels: np.ndarray,
+    train_and_score: Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray],
+    delta: float = 0.0,
+    confidence: float = 0.95,
+    guess_fraction: float = 1.0,
+    random_state: int | None = None,
+) -> AuditResult:
+    """Audit a trained model in a single run using membership canaries.
+
+    This is the model-level counterpart of :func:`audit_scalar_mechanism`: it
+    realises the one-run auditor of Steinke, Nasr & Jagielski (2023) against a
+    real learner and a real membership attack.  Each canary is independently
+    included (fair coin); included canaries are appended to the base training
+    set (repeated ``canaries.duplication`` times), the caller's
+    ``train_and_score`` trains one model on the augmented data and returns a
+    membership score for every canary, and :func:`audit_membership_scores`
+    inverts the score/label agreement into an ε lower bound.
+
+    Keeping training and scoring in the ``train_and_score`` callback makes the
+    audit agnostic to the mechanism: pass a DP-SGD trainer to audit DP-SGD, or a
+    plain learner to check that the audit has power where memorisation is real.
+    Because the auditor only sees scores, it cannot over-state privacy — a loose
+    bound means "not detected at this power", not "proven private".
+
+    Args:
+        canaries: The pool of canaries to include/exclude and score.
+        base_features: Real training features the canaries are added to.
+        base_labels: Labels aligned with ``base_features``.
+        train_and_score: Callable ``(X_aug, y_aug, canary_features) -> scores``
+            that trains one model on the augmented data and returns a membership
+            score per canary (higher = more member-like).
+        delta: δ of the (ε, δ)-DP claim being audited.
+        confidence: Confidence level 1 − β for the lower bound.
+        guess_fraction: Passed through to :func:`audit_membership_scores`.
+        random_state: Seed for the inclusion coins.
+
+    Returns:
+        An :class:`AuditResult`; ``details`` also carries the realised
+        ``included`` mask and the canary ``kind``/``duplication`` for reporting.
+    """
+    base_features = np.asarray(base_features, dtype=float)
+    base_labels = np.asarray(base_labels)
+    rng = np.random.default_rng(random_state)
+    included = rng.integers(0, 2, size=len(canaries))
+
+    in_features = canaries.features[included == 1]
+    in_labels = canaries.labels[included == 1]
+    if canaries.duplication > 1 and in_features.shape[0] > 0:
+        in_features = np.repeat(in_features, canaries.duplication, axis=0)
+        in_labels = np.repeat(in_labels, canaries.duplication)
+
+    aug_features = np.vstack([base_features, in_features])
+    aug_labels = np.concatenate([base_labels, in_labels])
+
+    scores = np.asarray(train_and_score(aug_features, aug_labels, canaries.features), dtype=float)
+    if scores.shape[0] != len(canaries):
+        raise ValueError("train_and_score must return one score per canary")
+
+    result = audit_membership_scores(
+        scores,
+        included,
+        delta=delta,
+        confidence=confidence,
+        guess_fraction=guess_fraction,
+    )
+    result.details["canary_kind"] = canaries.kind
+    result.details["duplication"] = canaries.duplication
+    result.details["included_fraction"] = float(included.mean())
+    return result
