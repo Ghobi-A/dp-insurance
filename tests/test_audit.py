@@ -25,7 +25,6 @@ from dp.audit import (
 from dp.canaries import make_label_flip_canaries
 from dp.mechanisms import add_laplace_noise
 
-
 # --- binomial one-run estimator -------------------------------------------
 
 def test_binomial_perfect_privacy_yields_zero():
