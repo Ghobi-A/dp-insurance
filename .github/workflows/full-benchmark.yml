@@ -1,0 +1,51 @@
+name: Full Benchmark
+
+# The full multi-seed benchmark is too expensive for every pull request, so
+# it runs on manual dispatch or a monthly schedule. Results are uploaded as
+# workflow artifacts; commit them to reports/generated to refresh the
+# published numbers.
+
+on:
+  workflow_dispatch:
+    inputs:
+      seeds:
+        description: "Space-separated seeds"
+        default: "0 1 2 3 4"
+      epsilons:
+        description: "Space-separated DP-SGD target epsilons"
+        default: "0.5 2.0 6.0"
+  schedule:
+    - cron: "0 6 1 * *"
+
+jobs:
+  full-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: pip
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install -e ".[experimental,dev]"
+    - name: Run full benchmark
+      run: |
+        python -m dp.benchmark --task all \
+          --seeds ${{ github.event.inputs.seeds || '0 1 2 3 4' }} \
+          --epsilons ${{ github.event.inputs.epsilons || '0.5 2.0 6.0' }} \
+          --output-dir reports/generated
+    - name: Generate reports
+      run: python -m dp.reporting --results reports/generated --reports-dir reports
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      with:
+        name: full-benchmark
+        path: |
+          reports/generated
+          reports/figures
+          reports/tables
+          reports/benchmark_report.md

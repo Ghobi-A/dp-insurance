@@ -14,6 +14,7 @@ from .audit import (
     epsilon_lower_bound_clopper_pearson,
     one_run_model_audit,
 )
+from .benchmark import run_benchmark, run_single_seed
 from .canaries import (
     CanarySet,
     make_duplicated_canaries,
@@ -31,6 +32,12 @@ from .mechanisms import (
     exponential_mechanism,
     randomized_response,
 )
+from .metrics import (
+    classification_metrics,
+    expected_calibration_error,
+    group_fairness_report,
+    select_threshold,
+)
 from .models import build_decision_tree_model, build_model_registry, build_svm_model
 from .pipeline import (
     apply_bounded_feature_noise,
@@ -40,8 +47,28 @@ from .pipeline import (
     preprocess_split,
     split_dataset,
 )
+from .tasks import TASKS, BenchmarkTask, TaskData, get_task, prepare_task_data
+from .uncertainty import (
+    bootstrap_confidence_interval,
+    seed_confidence_interval,
+    summarize_runs,
+)
 
 __all__ = [
+    "TASKS",
+    "BenchmarkTask",
+    "TaskData",
+    "bootstrap_confidence_interval",
+    "classification_metrics",
+    "expected_calibration_error",
+    "get_task",
+    "group_fairness_report",
+    "prepare_task_data",
+    "run_benchmark",
+    "run_single_seed",
+    "seed_confidence_interval",
+    "select_threshold",
+    "summarize_runs",
     "RANDOM_STATE",
     "AttackResult",
     "AuditResult",
