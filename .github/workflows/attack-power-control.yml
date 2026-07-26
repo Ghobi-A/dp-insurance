@@ -1,0 +1,81 @@
+name: Attack-power control
+
+# Manual dispatch only, plus the research PR. This trains dozens of shadow
+# models and must never run on every push to main.
+on:
+  workflow_dispatch:
+    inputs:
+      shadows:
+        description: Shadow models per control and target seed
+        required: false
+        default: "32"
+      seeds:
+        description: Space-separated target seeds
+        required: false
+        default: "42 43 44"
+      bootstrap_reps:
+        description: Stratified bootstrap replicates
+        required: false
+        default: "1000"
+      controls:
+        description: Space-separated control names to run
+        required: false
+        default: "matched_capacity_mlp memorising_mlp unbounded_decision_tree"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - research/attack_power_control.py
+      - .github/workflows/attack-power-control.yml
+      - tests/test_attack_power_control.py
+
+jobs:
+  attack-power-control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[experimental]"
+      - name: Run attack-power control experiment
+        shell: bash
+        run: |
+          mkdir -p reports/attack_power_control
+          set +e
+          python research/attack_power_control.py \
+            --shadows "${{ github.event.inputs.shadows || '32' }}" \
+            --seeds ${{ github.event.inputs.seeds || '42 43 44' }} \
+            --bootstrap-reps "${{ github.event.inputs.bootstrap_reps || '1000' }}" \
+            --controls ${{ github.event.inputs.controls || 'matched_capacity_mlp memorising_mlp unbounded_decision_tree' }} \
+            --output-dir reports/attack_power_control \
+            2>&1 | tee reports/attack_power_control/console.log
+          status=${PIPESTATUS[0]}
+          echo "exit_status=$status" >> reports/attack_power_control/console.log
+          exit "$status"
+      - name: Add report to workflow summary
+        if: always()
+        run: |
+          if [ -f reports/attack_power_control/attack_power_control.md ]; then
+            cat reports/attack_power_control/attack_power_control.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f reports/attack_power_control/console.log ]; then
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 80 reports/attack_power_control/console.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # Results are uploaded as artifacts only; they are never committed back to
+      # the repository and no pull request is merged by this workflow.
+      - name: Upload attack-power control results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: attack-power-control
+          path: reports/attack_power_control
+          if-no-files-found: warn
