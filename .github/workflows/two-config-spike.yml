@@ -1,0 +1,86 @@
+name: Powered two-config subgroup LiRA spike
+
+on:
+  push:
+    branches:
+      - research/two-config-spike
+    paths:
+      - research/two_config_spike.py
+      - research/powered_spike_runner.py
+      - .github/workflows/two-config-spike.yml
+      - src/dp/**
+      - data/insurance.csv
+      - pyproject.toml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - research/two_config_spike.py
+      - research/powered_spike_runner.py
+      - .github/workflows/two-config-spike.yml
+      - src/dp/**
+      - data/insurance.csv
+      - pyproject.toml
+  workflow_dispatch:
+    inputs:
+      shadows:
+        description: Number of size-matched DP shadow models per recipe and target seed
+        required: false
+        default: "32"
+      seeds:
+        description: Space-separated target seeds
+        required: false
+        default: "42 43 44"
+      bootstrap_reps:
+        description: Stratified bootstrap replicates for Delta confidence intervals
+        required: false
+        default: "1000"
+
+jobs:
+  spike:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[experimental]"
+      - name: Run powered two-config spike
+        shell: bash
+        run: |
+          mkdir -p reports/spike
+          set +e
+          python research/powered_spike_runner.py \
+            --shadows "${{ github.event.inputs.shadows || '32' }}" \
+            --seeds ${{ github.event.inputs.seeds || '42 43 44' }} \
+            --bootstrap-reps "${{ github.event.inputs.bootstrap_reps || '1000' }}" \
+            --auc-gate 0.70 \
+            --output-dir reports/spike \
+            2>&1 | tee reports/spike/run.log
+          status=${PIPESTATUS[0]}
+          echo "exit_status=$status" >> reports/spike/run.log
+          exit "$status"
+      - name: Add result to workflow summary
+        if: always()
+        run: |
+          if [ -f reports/spike/two_config_spike.md ]; then
+            cat reports/spike/two_config_spike.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f reports/spike/run.log ]; then
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 80 reports/spike/run.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload spike results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: powered-two-config-subgroup-lira-spike
+          path: reports/spike
+          if-no-files-found: warn
