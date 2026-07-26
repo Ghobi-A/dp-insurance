@@ -17,6 +17,10 @@ on:
         description: Stratified bootstrap replicates
         required: false
         default: "1000"
+      permutation_reps:
+        description: Stratified membership permutation replicates
+        required: false
+        default: "1000"
       controls:
         description: Space-separated control names to run
         required: false
@@ -53,6 +57,7 @@ jobs:
             --shadows "${{ github.event.inputs.shadows || '32' }}" \
             --seeds ${{ github.event.inputs.seeds || '42 43 44' }} \
             --bootstrap-reps "${{ github.event.inputs.bootstrap_reps || '1000' }}" \
+            --permutation-reps "${{ github.event.inputs.permutation_reps || '1000' }}" \
             --controls ${{ github.event.inputs.controls || 'matched_capacity_mlp memorising_mlp unbounded_decision_tree' }} \
             --output-dir reports/attack_power_control \
             2>&1 | tee reports/attack_power_control/console.log

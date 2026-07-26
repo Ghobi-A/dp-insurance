@@ -190,7 +190,9 @@ def test_bootstrap_rejects_missing_cells():
 
 def test_attack_metrics_shape_and_keys():
     groups, membership, scores = _toy_cohort(signal=2.0)
-    metrics = apc.attack_metrics(membership, groups, scores, bootstrap_reps=100, seed=0)
+    metrics = apc.attack_metrics(
+        membership, groups, scores, bootstrap_reps=100, seed=0, permutation_reps=50
+    )
 
     assert metrics["aggregate"]["auc"] > 0.5
     for fpr in apc.ATTACK_FPRS:
@@ -200,21 +202,230 @@ def test_attack_metrics_shape_and_keys():
     assert metrics["absolute_subgroup_gap"] >= 0.0
 
 
+
+# --------------------------------------------------------------------------- #
+# Permutation null
+# --------------------------------------------------------------------------- #
+
+
+def _separated_cohort(members_per_group=50, separation=5.0, female_boost=0.0):
+    """Deterministic cohort: members score higher, optionally more so for one sex."""
+    groups = np.array(["female"] * (2 * members_per_group) + ["male"] * (2 * members_per_group))
+    membership = np.tile(np.array([1] * members_per_group + [0] * members_per_group), 2)
+    base = np.tile(np.linspace(0.0, 1.0, members_per_group), 4)
+    scores = base + separation * membership
+    scores[: 2 * members_per_group] += female_boost * membership[: 2 * members_per_group]
+    return groups, membership, scores
+
+
+def test_permutation_preserves_group_member_counts():
+    groups, membership, scores = _separated_cohort()
+    observed_counts = {
+        group: (
+            int((membership[groups == group] == 1).sum()),
+            int((membership[groups == group] == 0).sum()),
+        )
+        for group in ("female", "male")
+    }
+
+    # Reproduce the internal shuffle and assert the invariant it relies on.
+    rng = np.random.default_rng(0)
+    group_idx = {group: np.flatnonzero(groups == group) for group in ("female", "male")}
+    for _ in range(20):
+        permuted = membership.copy()
+        for idx in group_idx.values():
+            permuted[idx] = rng.permutation(membership[idx])
+        for group, idx in group_idx.items():
+            assert (
+                int((permuted[idx] == 1).sum()),
+                int((permuted[idx] == 0).sum()),
+            ) == observed_counts[group]
+        assert permuted.sum() == membership.sum()
+
+
+def test_permutation_null_is_not_significant_for_identical_distributions():
+    # Scores carry no membership information at all.
+    groups = np.array(["female"] * 100 + ["male"] * 100)
+    membership = np.tile(np.array([1] * 50 + [0] * 50), 2)
+    scores = np.tile(np.linspace(0.0, 1.0, 50), 4)
+
+    summary = apc.stratified_membership_permutation_test(
+        groups, membership, scores, reps=200, seed=0
+    )
+    assert summary["aggregate_auc"]["p_value"] > apc.ALPHA
+    assert summary["aggregate_tpr"]["p_value"] > apc.ALPHA
+    assert summary["signed_difference"]["p_value"] > apc.ALPHA
+    assert summary["aggregate_auc"]["observed"] == pytest.approx(0.5, abs=0.05)
+
+
+def test_permutation_null_is_significant_for_separated_scores():
+    groups, membership, scores = _separated_cohort(separation=10.0)
+    summary = apc.stratified_membership_permutation_test(
+        groups, membership, scores, reps=200, seed=0
+    )
+    assert summary["aggregate_auc"]["observed"] == pytest.approx(1.0)
+    assert summary["aggregate_auc"]["p_value"] < apc.ALPHA
+    assert summary["aggregate_tpr"]["p_value"] < apc.ALPHA
+    assert summary["aggregate_auc"]["null_mean"] == pytest.approx(0.5, abs=0.05)
+
+
+def test_reversing_group_advantage_reverses_signed_difference():
+    groups, membership, scores = _separated_cohort(separation=1.0, female_boost=10.0)
+    female_favoured = apc.stratified_membership_permutation_test(
+        groups, membership, scores, reps=100, seed=0
+    )
+    # Swapping the labels swaps which group carries the advantage.
+    swapped_groups = np.where(groups == "female", "male", "female")
+    male_favoured = apc.stratified_membership_permutation_test(
+        swapped_groups, membership, scores, reps=100, seed=0
+    )
+
+    assert female_favoured["signed_difference"]["observed"] < 0
+    assert male_favoured["signed_difference"]["observed"] > 0
+    assert female_favoured["signed_difference"]["observed"] == pytest.approx(
+        -male_favoured["signed_difference"]["observed"]
+    )
+    assert female_favoured["absolute_gap"]["observed"] == pytest.approx(
+        male_favoured["absolute_gap"]["observed"]
+    )
+
+
+def test_permutation_results_are_reproducible_for_a_fixed_seed():
+    groups, membership, scores = _separated_cohort(separation=2.0)
+    first = apc.stratified_membership_permutation_test(
+        groups, membership, scores, reps=100, seed=11
+    )
+    second = apc.stratified_membership_permutation_test(
+        groups, membership, scores, reps=100, seed=11
+    )
+    different = apc.stratified_membership_permutation_test(
+        groups, membership, scores, reps=100, seed=12
+    )
+
+    assert first == second
+    assert different["aggregate_auc"]["observed"] == first["aggregate_auc"]["observed"]
+
+
+@pytest.mark.parametrize("separation", [0.0, 0.5, 10.0])
+def test_p_values_stay_in_the_attainable_range(separation):
+    groups, membership, scores = _separated_cohort(separation=separation)
+    reps = 100
+    summary = apc.stratified_membership_permutation_test(
+        groups, membership, scores, reps=reps, seed=5
+    )
+    floor = 1.0 / (reps + 1)
+    for entry in summary.values():
+        assert floor <= entry["p_value"] <= 1.0
+        assert entry["reps"] == reps
+
+
+def test_permutation_pvalue_correction_and_alternatives():
+    null = np.array([-3.0, -1.0, 0.0, 1.0, 3.0])
+    # One-sided: two draws are >= 1.0, so (1 + 2) / (5 + 1).
+    assert apc._permutation_pvalue(1.0, null, "greater") == pytest.approx(3 / 6)
+    # Two-sided compares absolute values: |-3|, |3| and |1| and |-1| are >= 1.
+    assert apc._permutation_pvalue(1.0, null, "two-sided") == pytest.approx(5 / 6)
+    # Nothing is more extreme than the maximum, so p hits the attainable floor.
+    assert apc._permutation_pvalue(4.0, null, "greater") == pytest.approx(1 / 6)
+
+
+def test_permutation_requires_both_classes_in_every_group():
+    groups = np.array(["female"] * 10 + ["male"] * 10)
+    membership = np.concatenate([np.ones(10, dtype=int), np.tile([1, 0], 5)])
+    with pytest.raises(RuntimeError):
+        apc.stratified_membership_permutation_test(
+            groups, membership, np.linspace(0, 1, 20), reps=10, seed=0
+        )
+
+
+def test_attack_metrics_include_permutation_block():
+    groups, membership, scores = _toy_cohort(signal=2.0)
+    metrics = apc.attack_metrics(
+        membership, groups, scores, bootstrap_reps=50, seed=0, permutation_reps=100
+    )
+    perm = metrics["permutation"]
+    assert set(perm) >= {
+        "aggregate_auc",
+        "aggregate_tpr",
+        "signed_difference",
+        "absolute_gap",
+        "female",
+        "male",
+    }
+    assert perm["signed_difference"]["alternative"] == "two-sided"
+    assert perm["aggregate_auc"]["alternative"] == "greater"
+
+
+def test_subgroup_disparity_not_claimed_from_aggregate_signal():
+    """A strong aggregate attack with no stable subgroup direction stays unsupported."""
+    control = apc.CONTROLS[1]
+    results = [
+        _seed_result(control, seed, auc=0.80, ci_low=0.20, signed=sign * 0.02, signed_p=0.4)
+        for seed, sign in zip((42, 43, 44), (1, -1, 1))
+    ]
+    verdict, _ = apc.classify_control(control, results)
+    subgroup_verdict, basis = apc.assess_subgroup_disparity(results)
+
+    assert verdict == apc.DETECTS
+    assert subgroup_verdict == apc.SUBGROUP_UNSUPPORTED
+    assert basis
+
+
+def test_subgroup_disparity_supported_when_stable_and_significant():
+    control = apc.CONTROLS[1]
+    results = [
+        _seed_result(control, seed, auc=0.80, ci_low=0.20, signed=0.25, signed_p=0.001)
+        for seed in (42, 43, 44)
+    ]
+    verdict, _ = apc.assess_subgroup_disparity(results)
+    assert verdict == apc.SUBGROUP_SUPPORTED
+
+
+def test_subgroup_disparity_inconclusive_without_completed_attacks():
+    control = apc.CONTROLS[0]
+    results = [
+        _seed_result(control, seed, gate=False, status="skipped_memorisation_gate")
+        for seed in (42, 43, 44)
+    ]
+    verdict, _ = apc.assess_subgroup_disparity(results)
+    assert verdict == apc.SUBGROUP_INCONCLUSIVE
+
+
 # --------------------------------------------------------------------------- #
 # Decision table and reporting
 # --------------------------------------------------------------------------- #
 
 
-def _seed_result(control, seed, *, gate=True, status="completed", auc=0.5, ci_low=0.0):
+def _seed_result(
+    control,
+    seed,
+    *,
+    gate=True,
+    status="completed",
+    auc=0.5,
+    ci_low=0.0,
+    signed=0.0,
+    signed_p=1.0,
+):
     groups, membership, scores = _toy_cohort(seed=seed)
     metrics = (
-        apc.attack_metrics(membership, groups, scores, bootstrap_reps=50, seed=seed)
+        apc.attack_metrics(
+            membership, groups, scores, bootstrap_reps=50, seed=seed, permutation_reps=50
+        )
         if status == "completed"
         else None
     )
     if metrics is not None:
+        # Overwrite the headline statistics so the decision logic is exercised
+        # against known values rather than fixture noise.
         metrics["aggregate"]["auc"] = auc
         metrics["bootstrap"]["aggregate"]["ci95_low"] = ci_low
+        metrics["signed_subgroup_difference"] = signed
+        metrics["absolute_subgroup_gap"] = abs(signed)
+        metrics["permutation"]["aggregate_auc"]["p_value"] = 0.001 if auc > 0.6 else 0.5
+        metrics["permutation"]["aggregate_tpr"]["p_value"] = 0.001 if auc > 0.6 else 0.5
+        metrics["permutation"]["signed_difference"]["p_value"] = signed_p
+        metrics["permutation"]["absolute_gap"]["p_value"] = signed_p
     return {
         "control": control.name,
         "kind": control.kind,
@@ -346,6 +557,46 @@ def test_report_states_no_go_when_positive_control_fails():
     assert "NO-GO" in markdown
     rows = apc.build_rows(_payload(seed_results, decisions))
     assert {row["attack"] for row in rows} == {"lira-offline"}
+
+
+def test_report_includes_permutation_results_and_separate_conclusions():
+    control = apc.CONTROLS[1]
+    seed_results = [
+        _seed_result(control, seed, auc=0.80, ci_low=0.20, signed=0.02, signed_p=0.4)
+        for seed in (42, 43, 44)
+    ]
+    decisions = [
+        {
+            "control": control.name,
+            "positive_control": True,
+            "seeds_attacked": 3,
+            "mean_auc_gap": 0.15,
+            "mean_lira_auc": 0.80,
+            "mean_permutation_p_auc": 0.001,
+            "verdict": apc.DETECTS,
+            "basis": "permutation null rejected on 3/3 seeds",
+            "subgroup_verdict": apc.SUBGROUP_UNSUPPORTED,
+            "subgroup_basis": "signed direction not stable",
+        }
+    ]
+    payload = _payload(seed_results, decisions)
+    payload["permutation_reps"] = 50
+    markdown = apc.render_markdown(payload)
+
+    assert "permutation" in markdown.lower()
+    assert "Stratified permutation tests" in markdown
+    # The three questions are answered separately.
+    assert "Is aggregate membership leakage detectable?" in markdown
+    assert "Does subgroup leakage differ by sex?" in markdown
+    assert "still suitable for the iso-epsilon" in markdown
+    # Aggregate detection must not be reported as subgroup disparity.
+    assert apc.SUBGROUP_UNSUPPORTED in markdown
+    assert "CONDITIONAL GO" in markdown
+
+    rows = apc.build_rows(payload)
+    assert all("permutation_p_aggregate_auc" in row for row in rows)
+    assert all("permutation_p_signed_difference" in row for row in rows)
+    assert all("female_permutation_p" in row for row in rows)
 
 
 @pytest.mark.slow

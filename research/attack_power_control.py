@@ -16,6 +16,12 @@ and online LiRA stay near chance against a model with a clear train--test gap,
 the attack -- not DP -- is the limiting factor, and the iso-epsilon subgroup
 research needs a larger dataset.
 
+Attack statistics are tested against a stratified membership permutation null
+(labels reshuffled within each sensitive group, scores fixed) as well as being
+bracketed by stratified bootstrap intervals. The bootstrap says how precise an
+estimate is; the permutation test says whether an estimate that large happens by
+chance.
+
 Run from the repository root::
 
     python research/attack_power_control.py --shadows 32 --seeds 42 43 44
@@ -42,6 +48,7 @@ HEADLINE_FPR = 0.01
 DEFAULT_SEEDS = (42, 43, 44)
 DEFAULT_SHADOWS = 32
 DEFAULT_BOOTSTRAP_REPS = 1000
+DEFAULT_PERMUTATION_REPS = 1000
 
 #: A control must show at least this much train--test separation on one of the
 #: three memorisation probes before the attack is worth running.
@@ -52,6 +59,14 @@ MIN_GAUSSIAN_OBSERVATIONS = 10
 #: Decision-table thresholds.
 DETECT_MEAN_AUC = 0.55
 CHANCE_AUC_BAND = 0.53
+#: Significance level for the permutation tests.
+ALPHA = 0.05
+#: A verdict needs this many seeds to reject the permutation null.
+MIN_SIGNIFICANT_SEEDS = 2
+
+SUBGROUP_SUPPORTED = "SUBGROUP DISPARITY SUPPORTED"
+SUBGROUP_UNSUPPORTED = "SUBGROUP DISPARITY UNSUPPORTED"
+SUBGROUP_INCONCLUSIVE = "SUBGROUP DISPARITY INCONCLUSIVE"
 
 DETECTS = "ATTACK DETECTS LEAKAGE"
 INCONCLUSIVE = "ATTACK INCONCLUSIVE"
@@ -383,12 +398,113 @@ def stratified_bootstrap(
     return summary
 
 
+def _permutation_pvalue(observed: float, null_draws: np.ndarray, alternative: str) -> float:
+    """Empirical p-value with the finite-sample ``(1 + k) / (reps + 1)`` correction.
+
+    ``alternative`` is ``"greater"`` for one-sided tests (AUC, TPR, absolute
+    gap) and ``"two-sided"`` for the signed subgroup difference, where the null
+    draws and the observation are compared on absolute value.
+    """
+    finite = null_draws[np.isfinite(null_draws)]
+    reps = int(len(null_draws))
+    if not np.isfinite(observed) or finite.size == 0:
+        return float("nan")
+    if alternative == "two-sided":
+        extreme = int(np.sum(np.abs(finite) >= abs(observed)))
+    else:
+        extreme = int(np.sum(finite >= observed))
+    return float((1 + extreme) / (reps + 1))
+
+
+def stratified_membership_permutation_test(
+    groups: np.ndarray,
+    membership: np.ndarray,
+    scores: np.ndarray,
+    target_fpr: float = HEADLINE_FPR,
+    reps: int = DEFAULT_PERMUTATION_REPS,
+    seed: int = 0,
+) -> dict[str, dict[str, float | str]]:
+    """Permutation null for the attack statistics, stratified by sensitive group.
+
+    Each replicate reshuffles the membership labels *within* each sensitive
+    group, so every group keeps its exact member/non-member counts while the
+    scores stay fixed. That destroys any association between score and
+    membership but preserves the cohort geometry, the class balance and the
+    discreteness of the operating point -- which is what a bootstrap interval
+    alone cannot tell you. The bootstrap says how precise the estimate is; this
+    says whether an estimate that size happens by chance.
+
+    Returns:
+        One entry per statistic (``aggregate_auc``, ``aggregate_tpr``, each
+        group's TPR, ``signed_difference`` and ``absolute_gap``) holding the
+        observed value, the permutation-null mean and 95% interval, and the
+        empirical p-value.
+    """
+    groups = np.asarray(groups).astype(str)
+    membership = np.asarray(membership)
+    scores = np.asarray(scores, dtype=float)
+    unique_groups = sorted(np.unique(groups))
+    group_idx = {group: np.flatnonzero(groups == group) for group in unique_groups}
+    for group, idx in group_idx.items():
+        if np.unique(membership[idx]).size < 2:
+            raise RuntimeError(f"permutation test needs both classes in group {group!r}")
+
+    def statistics(labels: np.ndarray) -> dict[str, float]:
+        group_tprs = {
+            group: tpr_at_fpr(labels[idx], scores[idx], target_fpr)
+            for group, idx in group_idx.items()
+        }
+        values = {
+            "aggregate_auc": float(roc_auc_score(labels, scores)),
+            "aggregate_tpr": tpr_at_fpr(labels, scores, target_fpr),
+            "signed_difference": signed_subgroup_difference(group_tprs),
+            "absolute_gap": absolute_subgroup_gap(group_tprs),
+        }
+        values.update(group_tprs)
+        return values
+
+    observed = statistics(membership)
+    rng = np.random.default_rng(seed)
+    null_draws: dict[str, list[float]] = {key: [] for key in observed}
+
+    for _ in range(reps):
+        permuted = membership.copy()
+        for idx in group_idx.values():
+            # Shuffling within the group's own labels preserves its exact
+            # member and non-member counts.
+            permuted[idx] = rng.permutation(membership[idx])
+        for key, value in statistics(permuted).items():
+            null_draws[key].append(value)
+
+    alternatives = {"signed_difference": "two-sided"}
+    summary: dict[str, dict[str, float | str]] = {}
+    for key, value in observed.items():
+        draws = np.asarray(null_draws[key], dtype=float)
+        finite = draws[np.isfinite(draws)]
+        low, high = (
+            np.percentile(finite, [2.5, 97.5]) if finite.size else (float("nan"),) * 2
+        )
+        summary[key] = {
+            "reps": int(reps),
+            "observed": float(value),
+            "null_mean": float(finite.mean()) if finite.size else float("nan"),
+            "null_ci95_low": float(low),
+            "null_ci95_high": float(high),
+            "alternative": alternatives.get(key, "greater"),
+            "p_value": _permutation_pvalue(
+                value, draws, alternatives.get(key, "greater")
+            ),
+        }
+    return summary
+
+
 def attack_metrics(
     membership: np.ndarray,
     groups: np.ndarray,
     scores: np.ndarray,
     bootstrap_reps: int,
     seed: int,
+    permutation_reps: int = DEFAULT_PERMUTATION_REPS,
 ) -> dict[str, object]:
     """Aggregate and subgroup metrics for one score vector."""
     membership = np.asarray(membership)
@@ -430,6 +546,9 @@ def attack_metrics(
         "bootstrap": stratified_bootstrap(
             groups, membership, scores, HEADLINE_FPR, bootstrap_reps, seed
         ),
+        "permutation": stratified_membership_permutation_test(
+            groups, membership, scores, HEADLINE_FPR, permutation_reps, seed + 1
+        ),
     }
 
 
@@ -456,30 +575,119 @@ def classify_control(
         [float(r["offline"]["bootstrap"]["aggregate"]["ci95_low"]) for r in completed],
         dtype=float,
     )
-    # Random-guessing baseline at a 1% FPR operating point is a 1% TPR.
-    above_baseline = ci_lows > HEADLINE_FPR
+    auc_p = np.asarray(
+        [float(r["offline"]["permutation"]["aggregate_auc"]["p_value"]) for r in completed],
+        dtype=float,
+    )
+    tpr_p = np.asarray(
+        [float(r["offline"]["permutation"]["aggregate_tpr"]["p_value"]) for r in completed],
+        dtype=float,
+    )
     mean_auc = float(np.nanmean(aucs))
+    # Random-guessing baseline at a 1% FPR operating point is a 1% TPR.
+    above_baseline = int(np.sum(ci_lows > HEADLINE_FPR))
+    significant = int(np.sum((auc_p < ALPHA) | (tpr_p < ALPHA)))
+    consistent_direction = bool(np.all(aucs > 0.5))
 
-    if mean_auc >= DETECT_MEAN_AUC and bool(np.all(aucs > 0.5)) and bool(above_baseline.any()):
+    if (
+        all(gate_passed)
+        and mean_auc >= DETECT_MEAN_AUC
+        and significant >= MIN_SIGNIFICANT_SEEDS
+        and consistent_direction
+    ):
         return (
             DETECTS,
-            f"Mean aggregate offline-LiRA AUC {mean_auc:.4f} above chance on every seed, "
-            f"with {int(above_baseline.sum())}/{len(completed)} seeds whose bootstrap "
-            "TPR@1% FPR interval sits above the 1% random baseline.",
+            f"Mean aggregate offline-LiRA AUC {mean_auc:.4f}, above chance on every seed; "
+            f"the stratified membership permutation null is rejected at p<{ALPHA} on "
+            f"{significant}/{len(completed)} seeds "
+            f"({above_baseline}/{len(completed)} bootstrap TPR@1% intervals also clear the "
+            "1% random baseline).",
         )
 
-    if control.positive_control and all(gate_passed) and mean_auc < CHANCE_AUC_BAND:
+    if (
+        control.positive_control
+        and all(gate_passed)
+        and mean_auc < CHANCE_AUC_BAND
+        and significant < MIN_SIGNIFICANT_SEEDS
+    ):
         return (
             FAILS_POSITIVE_CONTROL,
             f"Every seed shows a clear train-test gap, yet mean aggregate LiRA AUC is "
-            f"{mean_auc:.4f} -- statistically indistinguishable from chance.",
+            f"{mean_auc:.4f} and the permutation null survives on "
+            f"{len(completed) - significant}/{len(completed)} seeds.",
         )
 
     return (
         INCONCLUSIVE,
-        f"Mean aggregate LiRA AUC {mean_auc:.4f} with unstable or baseline-overlapping "
-        "bootstrap intervals across seeds.",
+        f"Mean aggregate LiRA AUC {mean_auc:.4f} with the permutation null rejected on "
+        f"only {significant}/{len(completed)} seeds.",
     )
+
+
+def assess_subgroup_disparity(seed_results: Sequence[dict[str, object]]) -> tuple[str, str]:
+    """Judge subgroup TPR disparity separately from aggregate attack power.
+
+    Aggregate leakage says nothing about whether one sex leaks more than the
+    other, so this never inherits the aggregate verdict. Disparity is called
+    supported only when the signed direction is stable across seeds, the
+    permutation null is rejected on enough seeds, and the bootstrap interval is
+    not simply the discrete operating-point resolution.
+    """
+    completed = [r for r in seed_results if r["attack_status"] == "completed"]
+    if not completed:
+        return SUBGROUP_INCONCLUSIVE, "No attack completed, so no subgroup comparison exists."
+
+    signed = np.asarray(
+        [float(r["offline"]["signed_subgroup_difference"]) for r in completed], dtype=float
+    )
+    signed_p = np.asarray(
+        [
+            float(r["offline"]["permutation"]["signed_difference"]["p_value"])
+            for r in completed
+        ],
+        dtype=float,
+    )
+    gap_p = np.asarray(
+        [float(r["offline"]["permutation"]["absolute_gap"]["p_value"]) for r in completed],
+        dtype=float,
+    )
+    significant = int(np.sum((signed_p < ALPHA) | (gap_p < ALPHA)))
+    nonzero = signed[signed != 0.0]
+    stable_direction = bool(nonzero.size and np.all(np.sign(nonzero) == np.sign(nonzero[0])))
+
+    # One extra member at the 1% FPR operating point moves a subgroup TPR by
+    # 1/n_members. A "gap" smaller than that is resolution, not disparity.
+    resolutions = [
+        1.0 / max(int(r["offline"]["subgroups"][group]["members"]), 1)
+        for r in completed
+        for group in r["offline"]["subgroups"]
+    ]
+    resolution = float(max(resolutions)) if resolutions else float("inf")
+    resolvable = bool(np.all(np.abs(signed) >= resolution) and signed.size)
+
+    if significant >= MIN_SIGNIFICANT_SEEDS and stable_direction and resolvable:
+        direction = "male" if np.mean(signed) > 0 else "female"
+        return (
+            SUBGROUP_SUPPORTED,
+            f"Signed male-female TPR@1% difference keeps the same sign on every seed "
+            f"({direction} more exposed), permutation p<{ALPHA} on "
+            f"{significant}/{len(completed)} seeds, and the effect exceeds the "
+            f"{resolution:.4f} operating-point resolution.",
+        )
+
+    reasons = []
+    if not stable_direction:
+        reasons.append("the signed direction is not stable across seeds")
+    if significant < MIN_SIGNIFICANT_SEEDS:
+        reasons.append(
+            f"the permutation null is rejected on only {significant}/{len(completed)} seeds"
+        )
+    if not resolvable:
+        reasons.append(
+            f"at least one gap is within the {resolution:.4f} discrete operating-point "
+            "resolution"
+        )
+    return SUBGROUP_UNSUPPORTED, "; ".join(reasons).capitalize() + "."
 
 
 # --------------------------------------------------------------------------- #
@@ -629,6 +837,7 @@ def run_control_seed(
     data_arrays: dict[str, np.ndarray],
     num_shadows: int,
     bootstrap_reps: int,
+    permutation_reps: int,
     seed: int,
     log,
 ) -> dict[str, object]:
@@ -730,6 +939,7 @@ def run_control_seed(
                 offline.scores,
                 bootstrap_reps,
                 seed + 20_000,
+                permutation_reps,
             ),
         }
     )
@@ -749,6 +959,7 @@ def run_control_seed(
             online.scores,
             bootstrap_reps,
             seed + 30_000,
+            permutation_reps,
         )
     else:
         result["online_unavailable_reason"] = (
@@ -793,6 +1004,7 @@ def build_rows(payload: dict[str, object]) -> list[dict[str, object]]:
                 continue
             aggregate = metrics["aggregate"]
             bootstrap = metrics["bootstrap"]
+            permutation = metrics["permutation"]
             row: dict[str, object] = {
                 "control": result["control"],
                 "seed": result["seed"],
@@ -821,6 +1033,24 @@ def build_rows(payload: dict[str, object]) -> list[dict[str, object]]:
                 ],
                 "aggregate_tpr_ci_low": bootstrap["aggregate"]["ci95_low"],
                 "aggregate_tpr_ci_high": bootstrap["aggregate"]["ci95_high"],
+                "permutation_p_aggregate_auc": permutation["aggregate_auc"]["p_value"],
+                "permutation_p_aggregate_tpr": permutation["aggregate_tpr"]["p_value"],
+                "permutation_null_auc_mean": permutation["aggregate_auc"]["null_mean"],
+                "permutation_null_auc_ci_low": permutation["aggregate_auc"]["null_ci95_low"],
+                "permutation_null_auc_ci_high": permutation["aggregate_auc"]["null_ci95_high"],
+                "permutation_null_tpr_mean": permutation["aggregate_tpr"]["null_mean"],
+                "permutation_null_tpr_ci_low": permutation["aggregate_tpr"]["null_ci95_low"],
+                "permutation_null_tpr_ci_high": permutation["aggregate_tpr"]["null_ci95_high"],
+                "permutation_p_signed_difference": permutation["signed_difference"]["p_value"],
+                "permutation_p_absolute_gap": permutation["absolute_gap"]["p_value"],
+                "permutation_null_signed_ci_low": permutation["signed_difference"][
+                    "null_ci95_low"
+                ],
+                "permutation_null_signed_ci_high": permutation["signed_difference"][
+                    "null_ci95_high"
+                ],
+                "permutation_null_gap_ci_low": permutation["absolute_gap"]["null_ci95_low"],
+                "permutation_null_gap_ci_high": permutation["absolute_gap"]["null_ci95_high"],
                 "signed_subgroup_difference": metrics["signed_subgroup_difference"],
                 "absolute_subgroup_gap": metrics["absolute_subgroup_gap"],
                 "signed_difference_ci_low": bootstrap["signed_difference"]["ci95_low"],
@@ -833,6 +1063,7 @@ def build_rows(payload: dict[str, object]) -> list[dict[str, object]]:
                 row[f"{group}_tpr_at_fpr_0.01"] = group_metrics["tpr_at_fpr_0.01"]
                 row[f"{group}_tpr_ci_low"] = bootstrap[group]["ci95_low"]
                 row[f"{group}_tpr_ci_high"] = bootstrap[group]["ci95_high"]
+                row[f"{group}_permutation_p"] = permutation[group]["p_value"]
             rows.append(row)
 
         if not result.get("offline"):
@@ -876,6 +1107,11 @@ def render_markdown(payload: dict[str, object]) -> str:
         "(balanced fixed-size schedule, training size pinned to the target's).",
         f"Bootstrap replicates: {payload['bootstrap_reps']}, resampled within each "
         "`sex x membership` cell.",
+        f"Permutation replicates: "
+        f"{payload.get('permutation_reps', DEFAULT_PERMUTATION_REPS)}, with membership "
+        "labels reshuffled within each sensitive group. Bootstrap intervals are kept, "
+        "but they are not used as the hypothesis test against chance; the permutation "
+        "null is.",
         (
             f"Memorisation gate: the attack runs only when train-test ROC-AUC, "
             f"test-train loss or train-test accuracy differs by at least "
@@ -1040,23 +1276,163 @@ def render_markdown(payload: dict[str, object]) -> str:
 
     lines += [
         "",
-        "## 8. Decision table",
+        "## 8. Stratified permutation tests against the membership null",
+        "",
+        (
+            f"Membership labels are reshuffled within each sensitive group "
+            f"({payload.get('permutation_reps', DEFAULT_PERMUTATION_REPS)} replicates), "
+            "preserving each group's exact member and non-member counts while the "
+            "attack scores stay fixed. Bootstrap intervals above describe the "
+            "precision of an estimate; these p-values ask whether an estimate that "
+            "large arises from finite-sample ROC variation alone. AUC, TPR and the "
+            "absolute gap use one-sided tests; the signed difference is two-sided on "
+            f"absolute value. All p-values use the (1+k)/(reps+1) correction, so the "
+            "smallest attainable value is "
+            f"{1.0 / (int(payload.get('permutation_reps', DEFAULT_PERMUTATION_REPS)) + 1):.4f}."
+        ),
+        "",
+        "| Control | Seed | Attack | AUC (p) | Null AUC 95% | TPR@1% (p) | Null TPR 95% | "
+        "Signed diff (p, two-sided) | Null signed 95% | Absolute gap (p) | Null gap 95% |",
+        "|---|---:|---|---|---|---|---|---|---|---|---|",
+    ]
+    for result in seed_results:
+        for variant in ("offline", "online"):
+            metrics = result.get(variant)
+            if not metrics:
+                continue
+            perm = metrics["permutation"]
+
+            def cell(key: str) -> str:
+                entry = perm[key]
+                return f"{_fmt(entry['observed'])} (p={_fmt(entry['p_value'], 4)})"
+
+            def null_ci(key: str) -> str:
+                entry = perm[key]
+                return f"[{_fmt(entry['null_ci95_low'])}, {_fmt(entry['null_ci95_high'])}]"
+
+            lines.append(
+                f"| {result['control']} | {result['seed']} | lira-{variant} | "
+                f"{cell('aggregate_auc')} | {null_ci('aggregate_auc')} | "
+                f"{cell('aggregate_tpr')} | {null_ci('aggregate_tpr')} | "
+                f"{cell('signed_difference')} | {null_ci('signed_difference')} | "
+                f"{cell('absolute_gap')} | {null_ci('absolute_gap')} |"
+            )
+    if not any(result.get("offline") for result in seed_results):
+        lines.append("| - | - | - | - | - | - | - | - | - | - | - |")
+
+    lines += [
+        "",
+        "Per-subgroup TPR@1% permutation p-values:",
+        "",
+        "| Control | Seed | Attack | Female TPR@1% (p) | Male TPR@1% (p) |",
+        "|---|---:|---|---|---|",
+    ]
+    for result in seed_results:
+        for variant in ("offline", "online"):
+            metrics = result.get(variant)
+            if not metrics:
+                continue
+            perm = metrics["permutation"]
+
+            def group_cell(name: str) -> str:
+                for candidate, entry in perm.items():
+                    if candidate.lower() == name:
+                        return f"{_fmt(entry['observed'])} (p={_fmt(entry['p_value'], 4)})"
+                return "-"
+
+            lines.append(
+                f"| {result['control']} | {result['seed']} | lira-{variant} | "
+                f"{group_cell('female')} | {group_cell('male')} |"
+            )
+    if not any(result.get("offline") for result in seed_results):
+        lines.append("| - | - | - | - | - |")
+
+    lines += [
+        "",
+        "## 9. Decision table",
         "",
         "| Control | Positive control | Seeds attacked | Mean memorisation gap (AUC) | "
-        "Mean offline LiRA AUC | Verdict | Basis |",
-        "|---|---|---:|---:|---:|---|---|",
+        "Mean offline LiRA AUC | Mean permutation p (AUC) | Verdict | Basis |",
+        "|---|---|---:|---:|---:|---:|---|---|",
     ]
     for decision in payload["decisions"]:
         lines.append(
             f"| {decision['control']} | {'yes' if decision['positive_control'] else 'no'} | "
             f"{decision['seeds_attacked']} | {_fmt(decision['mean_auc_gap'])} | "
-            f"{_fmt(decision['mean_lira_auc'])} | **{decision['verdict']}** | "
-            f"{decision['basis']} |"
+            f"{_fmt(decision['mean_lira_auc'])} | "
+            f"{_fmt(decision.get('mean_permutation_p_auc'))} | "
+            f"**{decision['verdict']}** | {decision['basis']} |"
         )
 
-    lines += ["", "## Conclusion", ""]
+    lines += [
+        "",
+        "Subgroup disparity is judged separately; an aggregate detection is never "
+        "carried over into a disparity claim.",
+        "",
+        "| Control | Subgroup verdict | Basis |",
+        "|---|---|---|",
+    ]
+    for decision in payload["decisions"]:
+        lines.append(
+            f"| {decision['control']} | **{decision.get('subgroup_verdict', SUBGROUP_INCONCLUSIVE)}** "
+            f"| {decision.get('subgroup_basis', '-')} |"
+        )
+
     failed = [d for d in payload["decisions"] if d["verdict"] == FAILS_POSITIVE_CONTROL]
     detected = [d for d in payload["decisions"] if d["verdict"] == DETECTS]
+    supported = [
+        d for d in payload["decisions"] if d.get("subgroup_verdict") == SUBGROUP_SUPPORTED
+    ]
+
+    lines += [
+        "",
+        "## Conclusions",
+        "",
+        "These three questions are answered separately. Aggregate attack success is "
+        "not evidence of subgroup disparity, and neither is evidence about the DP "
+        "results on its own.",
+        "",
+        "### 1. Is aggregate membership leakage detectable?",
+        "",
+    ]
+    if detected:
+        names = ", ".join(d["control"] for d in detected)
+        lines.append(
+            f"Yes, on: {names}. Mean aggregate LiRA AUC clears {DETECT_MEAN_AUC} with the "
+            f"stratified membership permutation null rejected at p<{ALPHA} on at least "
+            f"{MIN_SIGNIFICANT_SEEDS} of the target seeds, in a consistent direction."
+        )
+    elif failed:
+        lines.append(
+            "No. Every positive control memorised -- a clear train-test gap on all "
+            "seeds -- yet aggregate LiRA stayed near chance and the permutation null "
+            "was not rejected consistently."
+        )
+    else:
+        lines.append(
+            "Not established. No control produced both an above-chance mean AUC and "
+            "consistent rejection of the permutation null."
+        )
+
+    lines += ["", "### 2. Does subgroup leakage differ by sex?", ""]
+    if supported:
+        names = ", ".join(d["control"] for d in supported)
+        lines.append(
+            f"Supported on: {names} -- stable signed direction across seeds, "
+            f"permutation p<{ALPHA} on at least {MIN_SIGNIFICANT_SEEDS} seeds, and an "
+            "effect larger than the discrete operating-point resolution."
+        )
+    else:
+        lines.append(
+            "Not supported. No control satisfies all three requirements (stable signed "
+            "direction across seeds, permutation rejection on at least "
+            f"{MIN_SIGNIFICANT_SEEDS} seeds, and a gap exceeding the operating-point "
+            "resolution). Where an aggregate attack does succeed, that success is "
+            "reported as aggregate leakage only."
+        )
+
+    lines += ["", "### 3. Is the insurance dataset still suitable for the iso-epsilon "
+              "subgroup research question?", ""]
     if failed and not detected:
         lines += [
             "**Natural membership leakage is not reliably measurable with the current "
@@ -1069,22 +1445,32 @@ def render_markdown(payload: dict[str, object]) -> str:
             "attributed to differential privacy, because the same pipeline fails "
             "against an unprotected, demonstrably memorising target.",
         ]
-    elif detected:
-        names = ", ".join(d["control"] for d in detected)
+    elif detected and not supported:
         lines += [
-            f"The pipeline detects membership leakage on: {names}. The attack "
-            "implementation therefore has measurable power on this dataset, and the "
-            "null DP result is evidence about the DP-SGD configurations rather than "
-            "about the attack.",
+            "Partially. The pipeline has measurable aggregate attack power at "
+            "non-private capacity, so the powered spike's null is informative about "
+            "the DP-SGD configurations rather than about a dead attack. But the "
+            "subgroup contrast -- the actual research question -- is not resolvable "
+            "here: subgroup TPR@1% FPR moves in units of one member, so the cohort is "
+            "too small to separate a real disparity from operating-point resolution.",
             "",
-            "Go/no-go: **GO** -- the insurance dataset supports membership auditing "
-            "at non-private capacity, so subgroup DP work here remains interpretable.",
+            "Go/no-go: **CONDITIONAL GO** -- aggregate auditing on the insurance "
+            "dataset is sound, but the iso-epsilon *subgroup* comparison needs a "
+            "larger dataset to reach usable resolution.",
+        ]
+    elif detected and supported:
+        lines += [
+            "Yes. The pipeline detects aggregate leakage and a stable subgroup "
+            "disparity at non-private capacity, so the dataset can in principle "
+            "support the iso-epsilon subgroup comparison.",
+            "",
+            "Go/no-go: **GO** -- subgroup DP work on this dataset remains "
+            "interpretable.",
         ]
     else:
         lines += [
-            "No control produced a stable above-chance attack, and no positive "
-            "control both memorised and stayed at chance, so the experiment is "
-            "inconclusive.",
+            "Undetermined. No positive control both memorised and stayed at chance, "
+            "and no control produced a stable above-chance attack.",
             "",
             "Go/no-go: **HOLD** -- re-run with more shadows or a stronger memorising "
             "target before drawing conclusions about the insurance dataset.",
@@ -1093,7 +1479,8 @@ def render_markdown(payload: dict[str, object]) -> str:
     lines += [
         "",
         "Attack AUC near 0.5 is reported here as a failure of attack power, not as "
-        "evidence of privacy, and no claim of subgroup privacy variance is made.",
+        "evidence of privacy. No claim of subgroup privacy variance is made unless "
+        "section 2 above explicitly supports it.",
     ]
     return "\n".join(lines) + "\n"
 
@@ -1108,6 +1495,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--shadows", type=int, default=DEFAULT_SHADOWS)
     parser.add_argument("--seeds", nargs="+", type=int, default=list(DEFAULT_SEEDS))
     parser.add_argument("--bootstrap-reps", type=int, default=DEFAULT_BOOTSTRAP_REPS)
+    parser.add_argument("--permutation-reps", type=int, default=DEFAULT_PERMUTATION_REPS)
     parser.add_argument("--output-dir", default="reports/attack_power_control")
     parser.add_argument(
         "--controls",
@@ -1123,6 +1511,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         raise ValueError("Use at least three target seeds.")
     if args.bootstrap_reps < 200:
         raise ValueError("Use at least 200 bootstrap replicates.")
+    if args.permutation_reps < 200:
+        raise ValueError("Use at least 200 permutation replicates.")
 
     from dp.pipeline import build_preprocessor
     from dp.tasks import get_task, prepare_task_data
@@ -1155,6 +1545,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         "seeds": [int(seed) for seed in args.seeds],
         "num_shadows": int(args.shadows),
         "bootstrap_reps": int(args.bootstrap_reps),
+        "permutation_reps": int(args.permutation_reps),
+        "alpha": ALPHA,
         "memorisation_gate": MEMORISATION_GATE,
         "controls": [
             {**asdict(control), "architecture": control.architecture()}
@@ -1187,6 +1579,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 arrays,
                 num_shadows=args.shadows,
                 bootstrap_reps=args.bootstrap_reps,
+                permutation_reps=args.permutation_reps,
                 seed=seed,
                 log=log,
             )
@@ -1194,6 +1587,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             payload["seed_results"].append(result)
 
         verdict, basis = classify_control(control, control_results)
+        subgroup_verdict, subgroup_basis = assess_subgroup_disparity(control_results)
         completed = [r for r in control_results if r["attack_status"] == "completed"]
         payload["decisions"].append(
             {
@@ -1208,11 +1602,26 @@ def main(argv: Sequence[str] | None = None) -> None:
                     if completed
                     else None
                 ),
+                "mean_permutation_p_auc": (
+                    float(
+                        np.mean(
+                            [
+                                r["offline"]["permutation"]["aggregate_auc"]["p_value"]
+                                for r in completed
+                            ]
+                        )
+                    )
+                    if completed
+                    else None
+                ),
                 "verdict": verdict,
                 "basis": basis,
+                "subgroup_verdict": subgroup_verdict,
+                "subgroup_basis": subgroup_basis,
             }
         )
         log(f"[{control.name}] verdict: {verdict} -- {basis}")
+        log(f"[{control.name}] subgroup: {subgroup_verdict} -- {subgroup_basis}")
 
     json_path = output_dir / "attack_power_control.json"
     csv_path = output_dir / "attack_power_control.csv"
