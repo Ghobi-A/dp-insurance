@@ -10,6 +10,15 @@ on:
       - src/dp/**
       - data/insurance.csv
       - pyproject.toml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - research/two_config_spike.py
+      - .github/workflows/two-config-spike.yml
+      - src/dp/**
+      - data/insurance.csv
+      - pyproject.toml
   workflow_dispatch:
     inputs:
       shadows:
