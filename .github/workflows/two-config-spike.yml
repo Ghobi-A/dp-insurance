@@ -50,18 +50,30 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[experimental]"
       - name: Run powered two-config spike
+        shell: bash
         run: |
+          mkdir -p reports/spike
+          set +e
           python research/two_config_spike.py \
             --shadows "${{ github.event.inputs.shadows || '32' }}" \
             --seeds ${{ github.event.inputs.seeds || '42 43 44' }} \
             --bootstrap-reps "${{ github.event.inputs.bootstrap_reps || '1000' }}" \
             --auc-gate 0.70 \
-            --output-dir reports/spike
+            --output-dir reports/spike \
+            2>&1 | tee reports/spike/run.log
+          status=${PIPESTATUS[0]}
+          echo "exit_status=$status" >> reports/spike/run.log
+          exit "$status"
       - name: Add result to workflow summary
         if: always()
         run: |
           if [ -f reports/spike/two_config_spike.md ]; then
             cat reports/spike/two_config_spike.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f reports/spike/run.log ]; then
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 80 reports/spike/run.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload spike results
         if: always()
