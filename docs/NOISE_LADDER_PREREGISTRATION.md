@@ -167,3 +167,89 @@ declines to state a single threshold, and classifies the frontier as unstable.
 Any deviation from this document must be recorded in the results report with
 its reason. If exact ε calibration is not attainable, the nearest reproducible
 noise multiplier is used and the difference is documented.
+
+---
+
+## Preregistration Amendment 1 — attack all ladder points
+
+**Adopted before any corrected ladder run. The numerical detection thresholds
+below are unchanged from the original registration; only the execution rule and
+the classification vocabulary change.**
+
+### What the original version specified
+
+The original registration used the memorisation gate as an **execution gate**:
+a ladder point whose target failed the gate was recorded as
+`TARGET DID NOT MEMORISE` and the attack was never run against it. Only
+gate-passing points produced LiRA metrics.
+
+### Why that is wrong
+
+DP noise suppresses memorisation and attack power together. Gating execution on
+measured memorisation therefore removes observations **non-randomly, and
+precisely where the noise is highest** — the high-ε-noise end of the ladder is
+exactly where targets are least likely to clear the gate.
+
+That has two consequences. First, the ladder would be silent about attack
+behaviour in the regime the experiment exists to characterise. Second, and more
+seriously, the relationship between measured generalisation and measured
+leakage cannot be studied at all if every low-generalisation observation is
+discarded before it is measured: the sample would be truncated on a variable
+correlated with the outcome.
+
+Those low-memorisation observations are **necessary data**, not skippable
+cases.
+
+### What changes
+
+Every ladder point and every seed now receives the **complete matched-shadow
+attack**, regardless of the memorisation gate:
+
+* matched shadow training,
+* offline LiRA,
+* stratified membership permutation testing,
+* stratified bootstrap intervals,
+* subgroup metrics,
+* online LiRA where IN/OUT coverage permits.
+
+No result may carry the status `skipped_memorisation_gate`. Memorisation
+becomes **explanatory metadata** recorded alongside every observation, not a
+condition on whether the observation exists.
+
+### What does not change
+
+The aggregate detection rule is numerically identical to the original
+registration:
+
+* mean offline-LiRA AUC across seeds >= 0.55;
+* offline-LiRA AUC > 0.5 on every seed;
+* Holm-adjusted permutation null rejected on at least two of three seeds, at
+  alpha = 0.05, adjusted across ladder points within each seed.
+
+The memorisation criterion is also numerically unchanged — memorisation is
+**present** when any of `AUC gap >= 0.03`, `BCE gap >= 0.03`, or
+`accuracy gap >= 0.03` — but it is now read as a property of the target rather
+than a precondition for measurement.
+
+### Revised point classification
+
+Detection and memorisation are two independent binary decisions, and each point
+is classified by their combination:
+
+```text
+DETECTABLE WITH MEMORISATION
+DETECTABLE DESPITE LOW MEASURED MEMORISATION
+UNDETECTABLE DESPITE MEMORISATION
+UNDETECTABLE WITH LOW MEMORISATION
+```
+
+No point is ever labelled private, safe or verified. An undetected point means
+*not detected at this attack power and cohort size*, nothing more.
+
+### Status of the first workflow run
+
+Workflow run `30218898999` was launched automatically by the pull-request event
+**before this amendment existed**, and was cancelled roughly two and a half
+minutes into training. It produced no ladder-point results. It is retained as an
+**exploratory / timing run only** and is not the pre-registered ladder. No
+result in it may be cited as a finding.
