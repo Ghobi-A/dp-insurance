@@ -1,4 +1,4 @@
-name: Two-config subgroup LiRA spike
+name: Powered two-config subgroup LiRA spike
 
 on:
   push:
@@ -22,14 +22,22 @@ on:
   workflow_dispatch:
     inputs:
       shadows:
-        description: Number of DP shadow models per recipe
+        description: Number of size-matched DP shadow models per recipe and target seed
         required: false
-        default: "12"
+        default: "32"
+      seeds:
+        description: Space-separated target seeds
+        required: false
+        default: "42 43 44"
+      bootstrap_reps:
+        description: Stratified bootstrap replicates for Delta confidence intervals
+        required: false
+        default: "1000"
 
 jobs:
   spike:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,10 +49,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[experimental]"
-      - name: Run two-config spike
+      - name: Run powered two-config spike
         run: |
           python research/two_config_spike.py \
-            --shadows "${{ github.event.inputs.shadows || '12' }}" \
+            --shadows "${{ github.event.inputs.shadows || '32' }}" \
+            --seeds ${{ github.event.inputs.seeds || '42 43 44' }} \
+            --bootstrap-reps "${{ github.event.inputs.bootstrap_reps || '1000' }}" \
+            --auc-gate 0.70 \
             --output-dir reports/spike
       - name: Add result to workflow summary
         if: always()
@@ -56,6 +67,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: two-config-subgroup-lira-spike
+          name: powered-two-config-subgroup-lira-spike
           path: reports/spike
           if-no-files-found: warn
