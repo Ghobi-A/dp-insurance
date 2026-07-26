@@ -194,7 +194,8 @@ def _seed_result(
             "aggregate": {
                 "auc": auc,
                 "tpr_at_fpr_0.001": 0.01,
-                "tpr_at_fpr_0.01": 0.05,
+                # Vary with auc so rank correlations are defined in fixtures.
+                "tpr_at_fpr_0.01": round(max(0.0, auc - 0.5), 4),
                 "tpr_at_fpr_0.1": 0.2,
                 "operating_point": {
                     "detected_members": 6,
@@ -341,26 +342,69 @@ def _point(label, requested_epsilon, **kwargs):
 # --------------------------------------------------------------------------- #
 
 
-def test_detectable_when_all_criteria_met():
+def test_detectable_with_memorisation():
     results = _point("eps8", 8.0, auc=0.60, holm_p=0.01)["seed_results"]
     decision, basis = ladder.classify_ladder_point(results)
-    assert decision == ladder.DETECTABLE
+    assert decision == ladder.DETECTABLE_WITH_MEMORISATION
     assert "3/3" in basis
 
 
-def test_undetectable_when_mean_auc_below_threshold():
+def test_detectable_despite_low_measured_memorisation():
+    """Amendment 1: a low-memorisation point is still attacked and can detect."""
+    results = _point("eps8", 8.0, gate=False, auc=0.60, holm_p=0.01)["seed_results"]
+    decision, basis = ladder.classify_ladder_point(results)
+    assert decision == ladder.DETECTABLE_LOW_MEMORISATION
+    assert "below" in basis
+
+
+def test_undetectable_despite_memorisation():
     results = _point("eps4", 4.0, auc=0.52, holm_p=0.01)["seed_results"]
     decision, basis = ladder.classify_ladder_point(results)
-    assert decision == ladder.UNDETECTABLE
-    assert "mean AUC" in basis
-    assert "not evidence of privacy" in basis
+    assert decision == ladder.UNDETECTABLE_WITH_MEMORISATION
+    assert "not a privacy claim" in basis
 
 
-def test_undetectable_when_holm_adjusted_significance_insufficient():
-    results = _point("eps4", 4.0, auc=0.60, holm_p=0.20)["seed_results"]
-    decision, basis = ladder.classify_ladder_point(results)
-    assert decision == ladder.UNDETECTABLE
-    assert "0/3" in basis
+def test_undetectable_with_low_memorisation():
+    results = _point("eps2", 2.0, gate=False, auc=0.50, holm_p=0.9)["seed_results"]
+    decision, _ = ladder.classify_ladder_point(results)
+    assert decision == ladder.UNDETECTABLE_LOW_MEMORISATION
+
+
+def test_all_four_statuses_are_reachable_and_distinct():
+    combinations = {
+        (True, True): ladder.DETECTABLE_WITH_MEMORISATION,
+        (True, False): ladder.DETECTABLE_LOW_MEMORISATION,
+        (False, True): ladder.UNDETECTABLE_WITH_MEMORISATION,
+        (False, False): ladder.UNDETECTABLE_LOW_MEMORISATION,
+    }
+    seen = set()
+    for (detect, memorise), expected in combinations.items():
+        results = _point(
+            "eps8", 8.0, gate=memorise,
+            auc=0.60 if detect else 0.50,
+            holm_p=0.01 if detect else 0.9,
+        )["seed_results"]
+        assert ladder.classify_ladder_point(results)[0] == expected
+        seen.add(expected)
+    assert len(seen) == 4
+
+
+def test_no_result_is_ever_labelled_private_or_safe():
+    for gate in (True, False):
+        for auc, holm in ((0.60, 0.01), (0.50, 0.9)):
+            results = _point("eps8", 8.0, gate=gate, auc=auc, holm_p=holm)["seed_results"]
+            status, basis = ladder.classify_ladder_point(results)
+            text = f"{status} {basis}".lower()
+            for banned in ("private", "safe", "verified"):
+                assert banned not in text.replace("privacy claim", "")
+
+
+def test_detection_rule_thresholds_are_unchanged_by_the_amendment():
+    """The numeric rule is identical to the original registration."""
+    assert ladder.DETECT_MEAN_AUC == 0.55
+    assert ladder.MIN_SIGNIFICANT_SEEDS == 2
+    assert ladder.ALPHA == 0.05
+    assert ladder.MEMORISATION_GATE == 0.03
 
 
 def test_detection_requires_two_of_three_seeds():
@@ -369,40 +413,45 @@ def test_detection_requires_two_of_three_seeds():
         _seed_result(43, auc=0.60, holm_p=0.001),
         _seed_result(44, auc=0.60, holm_p=0.90),
     ]
-    assert ladder.classify_ladder_point(results)[0] == ladder.DETECTABLE
+    assert ladder.aggregate_detected(results)[0] is True
 
-    results[1]["offline"]["permutation"]["aggregate_auc"]["p_value_holm"] = 0.90
-    results[1]["offline"]["permutation"]["aggregate_tpr"]["p_value_holm"] = 0.90
-    assert ladder.classify_ladder_point(results)[0] == ladder.UNDETECTABLE
+    for stat in ("aggregate_auc", "aggregate_tpr"):
+        results[1]["offline"]["permutation"][stat]["p_value_holm"] = 0.90
+    assert ladder.aggregate_detected(results)[0] is False
 
 
-def test_undetectable_when_any_seed_at_or_below_chance():
+def test_detection_requires_every_seed_above_chance():
     results = [
         _seed_result(42, auc=0.62, holm_p=0.001),
         _seed_result(43, auc=0.61, holm_p=0.001),
         _seed_result(44, auc=0.48, holm_p=0.001),
     ]
-    decision, basis = ladder.classify_ladder_point(results)
-    assert decision == ladder.UNDETECTABLE
+    detected, basis = ladder.aggregate_detected(results)
+    assert detected is False
     assert "chance" in basis
 
 
-def test_failed_memorisation_gate_is_classified_not_dropped():
-    results = _point("eps2", 2.0, gate=False, status="skipped_memorisation_gate")[
-        "seed_results"
+def test_memorisation_present_requires_every_seed():
+    assert ladder.memorisation_present(_point("eps8", 8.0)["seed_results"]) is True
+    mixed = [
+        _seed_result(42, gate=True),
+        _seed_result(43, gate=True),
+        _seed_result(44, gate=False),
     ]
-    decision, basis = ladder.classify_ladder_point(results)
-    assert decision == ladder.DID_NOT_MEMORISE
-    assert "memorisation gate failed" in basis
+    assert ladder.memorisation_present(mixed) is False
 
 
-def test_partial_gate_failure_blocks_detection_claim():
-    results = [
-        _seed_result(42, auc=0.70, holm_p=0.001),
-        _seed_result(43, auc=0.70, holm_p=0.001),
-        _seed_result(44, gate=False, status="skipped_memorisation_gate"),
-    ]
-    assert ladder.classify_ladder_point(results)[0] == ladder.DID_NOT_MEMORISE
+def test_low_memorisation_points_still_carry_full_offline_metrics():
+    """The whole point of Amendment 1: no observation is discarded."""
+    results = _point("eps2", 2.0, gate=False)["seed_results"]
+    for result in results:
+        assert result["attack_status"] == "completed"
+        assert result["offline"] is not None
+        assert "aggregate" in result["offline"]
+        assert "permutation" in result["offline"]
+        assert "bootstrap" in result["offline"]
+        assert "subgroups" in result["offline"]
+        assert result["subgroup_resolution"] is not None
 
 
 # --------------------------------------------------------------------------- #
@@ -455,16 +504,22 @@ def test_subgroup_supported_when_all_criteria_met():
     assert "male" in basis
 
 
-def test_subgroup_inconclusive_without_completed_attacks():
-    results = _point("eps2", 2.0, gate=False, status="skipped_memorisation_gate")[
-        "seed_results"
-    ]
+def test_subgroup_inconclusive_only_when_an_attack_genuinely_failed():
+    """Under Amendment 1 this can no longer arise from the memorisation gate."""
+    results = _point("eps2", 2.0, gate=False, status="failed")["seed_results"]
     assert ladder.classify_subgroup(results)[0] == ladder.SUBGROUP_INCONCLUSIVE
+    # A low-memorisation point that *did* complete is assessed normally.
+    completed = _point("eps2", 2.0, gate=False)["seed_results"]
+    assert ladder.classify_subgroup(completed)[0] != ladder.SUBGROUP_INCONCLUSIVE
 
 
 # --------------------------------------------------------------------------- #
 # Frontier bracketing
 # --------------------------------------------------------------------------- #
+
+
+DETECTED = ladder.DETECTABLE_WITH_MEMORISATION
+NOT_DETECTED = ladder.UNDETECTABLE_WITH_MEMORISATION
 
 
 def _summaries(decisions):
@@ -496,12 +551,12 @@ def test_frontier_brackets_the_transition():
     frontier = ladder.detectability_frontier(
         _summaries(
             [
-                ladder.DETECTABLE,
-                ladder.DETECTABLE,
-                ladder.DETECTABLE,
-                ladder.UNDETECTABLE,
-                ladder.UNDETECTABLE,
-                ladder.UNDETECTABLE,
+                DETECTED,
+                DETECTED,
+                DETECTED,
+                NOT_DETECTED,
+                NOT_DETECTED,
+                NOT_DETECTED,
             ]
         )
     )
@@ -515,12 +570,12 @@ def test_frontier_flags_non_monotonic_ladders():
     frontier = ladder.detectability_frontier(
         _summaries(
             [
-                ladder.DETECTABLE,
-                ladder.UNDETECTABLE,
-                ladder.DETECTABLE,  # detection returns at lower epsilon
-                ladder.UNDETECTABLE,
-                ladder.UNDETECTABLE,
-                ladder.UNDETECTABLE,
+                DETECTED,
+                NOT_DETECTED,
+                DETECTED,  # detection returns at lower epsilon
+                NOT_DETECTED,
+                NOT_DETECTED,
+                NOT_DETECTED,
             ]
         )
     )
@@ -531,33 +586,35 @@ def test_frontier_flags_non_monotonic_ladders():
 
 
 def test_frontier_when_every_point_stays_detectable():
-    frontier = ladder.detectability_frontier(_summaries([ladder.DETECTABLE] * 6))
+    frontier = ladder.detectability_frontier(_summaries([DETECTED] * 6))
     assert frontier["bracket"] is None
     assert "below the lowest epsilon tested" in frontier["summary"]
 
 
 def test_frontier_when_nothing_is_detectable():
-    frontier = ladder.detectability_frontier(_summaries([ladder.UNDETECTABLE] * 6))
+    frontier = ladder.detectability_frontier(_summaries([NOT_DETECTED] * 6))
     assert frontier["bracket"] is None
     assert "attack-power problem" in frontier["summary"]
 
 
-def test_frontier_ignores_points_that_did_not_memorise():
+def test_frontier_includes_low_memorisation_points():
+    """Every point is classifiable now, so none is skipped when bracketing."""
     frontier = ladder.detectability_frontier(
         _summaries(
             [
-                ladder.DETECTABLE,
-                ladder.DETECTABLE,
-                ladder.DID_NOT_MEMORISE,
-                ladder.UNDETECTABLE,
-                ladder.UNDETECTABLE,
-                ladder.DID_NOT_MEMORISE,
+                DETECTED,
+                DETECTED,
+                ladder.DETECTABLE_LOW_MEMORISATION,
+                ladder.UNDETECTABLE_LOW_MEMORISATION,
+                NOT_DETECTED,
+                ladder.UNDETECTABLE_LOW_MEMORISATION,
             ]
         )
     )
     assert not frontier["non_monotonic"]
-    assert frontier["bracket"]["detectable_at"] == "eps32"
+    assert frontier["bracket"]["detectable_at"] == "eps16"
     assert frontier["bracket"]["not_detectable_at"] == "eps8"
+    assert len(frontier["ordered_points"]) == 6
 
 
 # --------------------------------------------------------------------------- #
@@ -714,12 +771,13 @@ def test_report_handles_online_lira_unavailable():
     assert "lira-offline" in markdown
 
 
-def test_report_keeps_points_that_did_not_memorise():
+def test_report_keeps_low_memorisation_points_with_full_metrics():
     points = [
         _point(ladder.NON_PRIVATE_LABEL, None, holm_p=0.001, auc=0.62),
-        _point("eps2", 2.0, gate=False, status="skipped_memorisation_gate"),
+        _point("eps2", 2.0, gate=False, auc=0.50, holm_p=0.9),
     ]
     summaries = ladder.summarise_points(points)
+    observations = ladder.collect_observations(summaries)
     payload = {
         "task": ladder.TASK_NAME,
         "sensitive_attribute": ladder.SENSITIVE_ATTRIBUTE,
@@ -731,11 +789,145 @@ def test_report_keeps_points_that_did_not_memorise():
         "epochs": 400,
         "points": summaries,
         "frontier": ladder.detectability_frontier(summaries),
+        "observations": observations,
+        "gap_associations": ladder.gap_associations(observations, reps=20, seed=0),
+        "association_only_statement": ladder.ASSOCIATION_ONLY_STATEMENT,
     }
     markdown = ladder.render_markdown(payload)
+
     assert "eps2" in markdown
-    assert ladder.DID_NOT_MEMORISE in markdown
-    assert "skipped_memorisation_gate" in markdown
+    assert ladder.UNDETECTABLE_LOW_MEMORISATION in markdown
+    # Amendment 1: the discarded-point vocabulary must be gone entirely.
+    assert "skipped_memorisation_gate" not in markdown
+    assert "TARGET DID NOT MEMORISE" not in markdown
+    # The low-memorisation point still contributes real numbers.
+    assert len(observations) == 6
+
+
+def test_no_output_ever_contains_the_skipped_status():
+    points = [
+        _point(ladder.NON_PRIVATE_LABEL, None, gate=False, auc=0.50, holm_p=0.9),
+        _point("eps2", 2.0, gate=False, auc=0.50, holm_p=0.9),
+    ]
+    summaries = ladder.summarise_points(points)
+    rows = ladder.build_rows(summaries)
+    blob = json.dumps(summaries, default=float) + json.dumps(rows, default=float)
+    assert "skipped_memorisation_gate" not in blob
+    assert all(row["attack_status"] == "completed" for row in rows)
+
+
+def test_every_point_enters_holm_adjustment():
+    """Including low-memorisation points, which the old gate would have removed."""
+    points = [
+        _point(ladder.NON_PRIVATE_LABEL, None, holm_p=0.001),
+        _point("eps32", 32.0, gate=False, holm_p=0.01),
+        _point("eps16", 16.0, gate=False, holm_p=0.02),
+    ]
+    for point in points:
+        for result in point["seed_results"]:
+            result["offline"]["permutation"]["aggregate_auc"].pop("p_value_holm")
+    ladder.apply_holm_across_points(points)
+    for point in points:
+        for result in point["seed_results"]:
+            assert "p_value_holm" in result["offline"]["permutation"]["aggregate_auc"]
+
+
+def test_every_point_enters_the_gap_analysis():
+    points = [
+        _point(ladder.NON_PRIVATE_LABEL, None, auc=0.62),
+        _point("eps32", 32.0, gate=False, auc=0.55),
+        _point("eps2", 2.0, gate=False, auc=0.50),
+    ]
+    observations = ladder.collect_observations(ladder.summarise_points(points))
+    assert len(observations) == 9
+    # Low-memorisation observations are present, not filtered out.
+    assert sum(1 for o in observations if not o["memorisation_threshold_passed"]) == 6
+    assert all(np.isfinite(o["lira_auc"]) for o in observations)
+    for field in ("bce_gap", "auc_gap", "accuracy_gap", "achieved_epsilon",
+                  "noise_multiplier", "tpr_at_1pct"):
+        assert field in observations[0]
+
+
+def test_gap_associations_return_finite_ordered_intervals():
+    points = [
+        _point(ladder.NON_PRIVATE_LABEL, None, auc=0.62),
+        _point("eps32", 32.0, auc=0.58),
+        _point("eps8", 8.0, gate=False, auc=0.52),
+        _point("eps2", 2.0, gate=False, auc=0.50),
+    ]
+    observations = ladder.collect_observations(ladder.summarise_points(points))
+    associations = ladder.gap_associations(observations, reps=50, seed=1)
+
+    assert set(associations) == {
+        f"{gap}__{leak}"
+        for gap in ladder.GAP_METRICS
+        for leak in ladder.LEAKAGE_METRICS
+    }
+    for entry in associations.values():
+        assert entry["ci95_low"] <= entry["ci95_high"]
+        assert -1.0 <= entry["spearman"] <= 1.0 or np.isnan(entry["spearman"])
+        assert entry["n_observations"] == len(observations)
+
+
+def test_gap_associations_handle_degenerate_constant_inputs():
+    """A constant metric makes Spearman undefined; that must not crash."""
+    points = [_point(ladder.NON_PRIVATE_LABEL, None, auc=0.60), _point("eps8", 8.0, auc=0.60)]
+    observations = ladder.collect_observations(ladder.summarise_points(points))
+    associations = ladder.gap_associations(observations, reps=20, seed=0)
+    for entry in associations.values():
+        low, high = entry["ci95_low"], entry["ci95_high"]
+        assert np.isnan(low) or low <= high
+
+
+def test_report_contains_the_association_not_causation_statement_verbatim():
+    points = [_point(ladder.NON_PRIVATE_LABEL, None, auc=0.62), _point("eps8", 8.0)]
+    summaries = ladder.summarise_points(points)
+    observations = ladder.collect_observations(summaries)
+    payload = {
+        "task": ladder.TASK_NAME,
+        "sensitive_attribute": ladder.SENSITIVE_ATTRIBUTE,
+        "delta": ladder.DELTA,
+        "seeds": [42, 43, 44],
+        "num_shadows": 32,
+        "bootstrap_reps": 10,
+        "permutation_reps": 10,
+        "epochs": 400,
+        "points": summaries,
+        "frontier": ladder.detectability_frontier(summaries),
+        "observations": observations,
+        "gap_associations": ladder.gap_associations(observations, reps=20, seed=0),
+        "association_only_statement": ladder.ASSOCIATION_ONLY_STATEMENT,
+    }
+    markdown = ladder.render_markdown(payload)
+
+    expected = (
+        "These analyses measure association only. DP noise changes both "
+        "generalisation and leakage, so this experiment does not identify an effect "
+        "of DP on membership leakage independently of its effect on memorisation."
+    )
+    assert expected == ladder.ASSOCIATION_ONLY_STATEMENT
+    assert expected in markdown
+    for banned in ("mediation", "beyond generalisation", "causes", "causal effect"):
+        assert banned not in markdown.lower().replace(
+            'no causal, mediation or "beyond generalisation" claim', ""
+        )
+
+
+def test_preregistration_amendment_exists():
+    text = (ROOT / "docs" / "NOISE_LADDER_PREREGISTRATION.md").read_text()
+    assert "## Preregistration Amendment 1 — attack all ladder points" in text
+    for required in (
+        "execution gate",
+        "explanatory metadata",
+        ladder.DETECTABLE_WITH_MEMORISATION,
+        ladder.DETECTABLE_LOW_MEMORISATION,
+        ladder.UNDETECTABLE_WITH_MEMORISATION,
+        ladder.UNDETECTABLE_LOW_MEMORISATION,
+        "30218898999",
+        "exploratory",
+    ):
+        assert required in text
+    assert "0.55" in text and "0.03" in text
 
 
 def test_csv_rows_cover_every_point_and_seed():
@@ -783,3 +975,82 @@ def test_smoke_ladder_point_runs(tmp_path):
         ]
     )
     assert (tmp_path / "eps8.json").exists()
+
+
+# --------------------------------------------------------------------------- #
+# Conditional canary pilot
+# --------------------------------------------------------------------------- #
+
+canary = _load("canary_pilot", "research/canary_pilot.py")
+
+
+def _canary_payload(accuracy, eps_lb):
+    entry = {
+        "construction": "label-flip",
+        "probe": "record-level membership",
+        "num_canaries": 200,
+        "duplication": 1,
+        "num_guesses": 200,
+        "num_correct": int(accuracy * 200),
+        "attacker_accuracy": accuracy,
+        "epsilon_lower_bound": eps_lb,
+        "confidence": 0.95,
+        "passes_pilot": accuracy >= canary.MIN_ATTACKER_ACCURACY
+        and eps_lb > canary.MIN_EPSILON_LOWER_BOUND,
+    }
+    passed = entry["passes_pilot"]
+    return {
+        "experiment": "canary_pilot_non_private",
+        "task": ladder.TASK_NAME,
+        "private": False,
+        "epochs": 400,
+        "architecture": "Linear(d,128->128->64->1) + ReLU",
+        "batch_size": 64,
+        "learning_rate": 1e-3,
+        "seed": 42,
+        "min_attacker_accuracy": canary.MIN_ATTACKER_ACCURACY,
+        "min_epsilon_lower_bound": canary.MIN_EPSILON_LOWER_BOUND,
+        "results": [entry],
+        "verdict": canary.PILOT_PASSED if passed else canary.UNDERPOWERED,
+        "extend_to_dp_sentinels": passed,
+    }
+
+
+def test_canary_pilot_matches_the_ladder_architecture():
+    assert canary.HIDDEN_UNITS == ladder.HIDDEN_UNITS == (128, 128, 64)
+    assert canary.BATCH_SIZE == ladder.BATCH_SIZE == 64
+    assert canary.LEARNING_RATE == ladder.LEARNING_RATE == 1e-3
+    assert canary.EPOCHS == ladder.EPOCHS == 400
+    assert canary.TASK_NAME == ladder.TASK_NAME == "high_cost"
+
+
+def test_failed_canary_pilot_blocks_further_canary_runs():
+    payload = _canary_payload(accuracy=0.55, eps_lb=0.0)
+    assert payload["verdict"] == canary.UNDERPOWERED
+    assert payload["extend_to_dp_sentinels"] is False
+
+    markdown = canary.render_markdown(payload)
+    assert canary.UNDERPOWERED in markdown
+    assert "stops here" in markdown
+    assert "never *proven private*" in markdown
+
+
+def test_canary_pilot_requires_both_thresholds():
+    # High accuracy but a zero bound is not enough.
+    assert _canary_payload(0.95, 0.0)["extend_to_dp_sentinels"] is False
+    # A positive bound with weak accuracy is not enough either.
+    assert _canary_payload(0.60, 1.2)["extend_to_dp_sentinels"] is False
+    # Both together justify extension.
+    assert _canary_payload(0.80, 1.2)["extend_to_dp_sentinels"] is True
+
+
+def test_passing_canary_pilot_does_not_auto_run_dp_points():
+    markdown = canary.render_markdown(_canary_payload(0.80, 1.2))
+    assert "does not start automatically" in markdown
+    assert "separate, explicitly requested run" in markdown
+
+
+def test_duplicated_canaries_are_labelled_as_a_group_privacy_probe():
+    markdown = canary.render_markdown(_canary_payload(0.80, 1.2))
+    assert "group-privacy" in markdown.lower()
+    assert "k*epsilon" in markdown

@@ -1,4 +1,9 @@
-"""DP-SGD detectability noise ladder for the insurance ``high_cost`` task.
+"""Worst-case neural auditability ladder for the insurance ``high_cost`` task.
+
+This is an **auditability ladder for a deliberately memorising neural target**,
+not a universal DP-SGD detectability frontier. Its subject is one intentionally
+attackable architecture; nothing here characterises DP-SGD in general, or any
+other model family, or any other dataset.
 
 The attack-power control (``research/attack_power_control.py``) established that
 aggregate membership leakage *is* measurable on this dataset when a model
@@ -82,9 +87,13 @@ TRAIN_SIZE = 856
 LADDER_EPSILONS: tuple[float | None, ...] = (None, 32.0, 16.0, 8.0, 4.0, 2.0)
 NON_PRIVATE_LABEL = "non-private"
 
-DETECTABLE = "AGGREGATE LEAKAGE DETECTABLE"
-UNDETECTABLE = "UNDETECTABLE AT CURRENT POWER"
-DID_NOT_MEMORISE = "TARGET DID NOT MEMORISE"
+#: Amendment 1 classifications: detection and memorisation are two independent
+#: binary decisions, and every point is labelled by their combination.
+DETECTABLE_WITH_MEMORISATION = "DETECTABLE WITH MEMORISATION"
+DETECTABLE_LOW_MEMORISATION = "DETECTABLE DESPITE LOW MEASURED MEMORISATION"
+UNDETECTABLE_WITH_MEMORISATION = "UNDETECTABLE DESPITE MEMORISATION"
+UNDETECTABLE_LOW_MEMORISATION = "UNDETECTABLE WITH LOW MEMORISATION"
+DETECTABLE_STATUSES = (DETECTABLE_WITH_MEMORISATION, DETECTABLE_LOW_MEMORISATION)
 
 SUBGROUP_SUPPORTED = "SUBGROUP DISPARITY SUPPORTED"
 SUBGROUP_UNSUPPORTED = "SUBGROUP DISPARITY UNSUPPORTED"
@@ -281,27 +290,28 @@ def holm_adjust(p_values: Sequence[float]) -> list[float]:
 # --------------------------------------------------------------------------- #
 
 
-def classify_ladder_point(seed_results: Sequence[dict[str, object]]) -> tuple[str, str]:
-    """Apply the pre-registered aggregate detection rule to one ladder point.
+def memorisation_present(seed_results: Sequence[dict[str, object]]) -> bool:
+    """Whether the target memorised, as metadata rather than a gate.
 
-    Requires: gate passed on all seeds; mean offline AUC >= 0.55; AUC > 0.5 on
-    every seed; Holm-adjusted permutation null rejected on >= 2 of 3 seeds.
+    A point counts as memorising when the pre-registered criterion holds on
+    every seed. Unchanged numerically from the original registration; only its
+    role changed under Amendment 1.
     """
     if not seed_results:
-        return DID_NOT_MEMORISE, "No seed produced a target model."
+        return False
+    return all(bool(r["memorisation_gate_passed"]) for r in seed_results)
 
-    gates = [bool(r["memorisation_gate_passed"]) for r in seed_results]
-    if not all(gates):
-        failed = sum(1 for g in gates if not g)
-        return (
-            DID_NOT_MEMORISE,
-            f"The memorisation gate failed on {failed}/{len(gates)} seeds, so the "
-            "pre-registered rule cannot classify detectability here.",
-        )
 
+def aggregate_detected(seed_results: Sequence[dict[str, object]]) -> tuple[bool, str]:
+    """Apply the pre-registered aggregate detection rule.
+
+    Thresholds are numerically identical to the original registration: mean
+    offline AUC >= 0.55, AUC > 0.5 on every seed, and the Holm-adjusted
+    permutation null rejected on at least two of three seeds.
+    """
     completed = [r for r in seed_results if r["attack_status"] == "completed"]
     if not completed:
-        return UNDETECTABLE, "Gate passed but no attack completed."
+        return False, "no attack completed"
 
     aucs = np.asarray(
         [float(r["offline"]["aggregate"]["auc"]) for r in completed], dtype=float
@@ -316,34 +326,63 @@ def classify_ladder_point(seed_results: Sequence[dict[str, object]]) -> tuple[st
     mean_auc = float(np.nanmean(aucs))
     significant = int(np.sum(adjusted < ALPHA))
     above_chance = bool(np.all(aucs > 0.5))
-    # The pre-registered rule is "2 of 3 seeds". Reduced-seed smoke runs would
-    # otherwise be unsatisfiable; at the pre-registered three seeds this is
-    # exactly MIN_SIGNIFICANT_SEEDS.
+    # "2 of 3" at the pre-registered three seeds; reduced-seed smoke runs would
+    # otherwise be unsatisfiable.
     required = min(MIN_SIGNIFICANT_SEEDS, len(completed))
 
     if mean_auc >= DETECT_MEAN_AUC and above_chance and significant >= required:
-        return (
-            DETECTABLE,
-            f"Mean offline-LiRA AUC {mean_auc:.4f} (>= {DETECT_MEAN_AUC}), above 0.5 on "
+        return True, (
+            f"mean offline-LiRA AUC {mean_auc:.4f} (>= {DETECT_MEAN_AUC}), above 0.5 on "
             f"every seed, Holm-adjusted permutation null rejected on "
-            f"{significant}/{len(completed)} seeds (>= {required} required).",
+            f"{significant}/{len(completed)} seeds (>= {required} required)"
         )
 
     reasons = []
     if mean_auc < DETECT_MEAN_AUC:
         reasons.append(f"mean AUC {mean_auc:.4f} < {DETECT_MEAN_AUC}")
     if not above_chance:
-        reasons.append("at least one seed is at or below chance")
+        reasons.append("at least one seed at or below chance")
     if significant < required:
         reasons.append(
             f"Holm-adjusted rejection on only {significant}/{len(completed)} seeds "
             f"({required} required)"
         )
-    return (
-        UNDETECTABLE,
-        "Target memorised but " + "; ".join(reasons) + ". Not detected at this power -- "
-        "this is not evidence of privacy.",
-    )
+    return False, "; ".join(reasons)
+
+
+def classify_ladder_point(seed_results: Sequence[dict[str, object]]) -> tuple[str, str]:
+    """Classify one ladder point by combining detection and memorisation.
+
+    Under Amendment 1 these are two independent binary decisions, and every
+    point receives one of four statuses. No point is ever labelled private,
+    safe or verified: an undetected point means *not detected at this attack
+    power and cohort size*.
+    """
+    detected, detection_basis = aggregate_detected(seed_results)
+    memorised = memorisation_present(seed_results)
+
+    if detected and memorised:
+        status = DETECTABLE_WITH_MEMORISATION
+        basis = f"Detected ({detection_basis}); target memorised on every seed."
+    elif detected and not memorised:
+        status = DETECTABLE_LOW_MEMORISATION
+        basis = (
+            f"Detected ({detection_basis}) even though measured memorisation is below "
+            f"the {MEMORISATION_GATE} criterion on at least one seed."
+        )
+    elif memorised:
+        status = UNDETECTABLE_WITH_MEMORISATION
+        basis = (
+            f"Target memorised on every seed, yet not detected: {detection_basis}. "
+            "Not detected at this attack power -- not a privacy claim."
+        )
+    else:
+        status = UNDETECTABLE_LOW_MEMORISATION
+        basis = (
+            f"Not detected ({detection_basis}) and measured memorisation is below the "
+            f"{MEMORISATION_GATE} criterion on at least one seed."
+        )
+    return status, basis
 
 
 def classify_subgroup(seed_results: Sequence[dict[str, object]]) -> tuple[str, str]:
@@ -432,8 +471,9 @@ def detectability_frontier(points: Sequence[dict[str, object]]) -> dict[str, obj
         ),
         reverse=True,
     )
-    classified = [p for p in ordered if p["decision"] != DID_NOT_MEMORISE]
-    flags = [p["decision"] == DETECTABLE for p in classified]
+    # Amendment 1: every point is attacked, so every point is classifiable.
+    classified = list(ordered)
+    flags = [p["decision"] in DETECTABLE_STATUSES for p in classified]
 
     # Monotone means: every detectable point precedes every undetectable one.
     non_monotonic = any(
@@ -515,6 +555,129 @@ def detectability_frontier(points: Sequence[dict[str, object]]) -> dict[str, obj
     return result
 
 
+
+# --------------------------------------------------------------------------- #
+# Generalisation-gap association analysis
+# --------------------------------------------------------------------------- #
+
+#: Verbatim caveat required on every report carrying this analysis.
+ASSOCIATION_ONLY_STATEMENT = (
+    "These analyses measure association only. DP noise changes both "
+    "generalisation and leakage, so this experiment does not identify an effect "
+    "of DP on membership leakage independently of its effect on memorisation."
+)
+
+GAP_METRICS = ("bce_gap", "auc_gap", "accuracy_gap")
+LEAKAGE_METRICS = ("lira_auc", "tpr_at_1pct")
+
+
+def collect_observations(summaries: Sequence[dict[str, object]]) -> list[dict[str, object]]:
+    """One record per seed-level observation, including low-memorisation points.
+
+    Every observation is retained. Under Amendment 1 there are no skipped
+    points, and none may be filtered out here either -- dropping the
+    low-memorisation end is exactly the truncation the amendment exists to
+    prevent.
+    """
+    observations: list[dict[str, object]] = []
+    for summary in summaries:
+        for result in summary["seed_results"]:
+            metrics = result.get("offline")
+            memo = result["memorisation"]
+            observations.append(
+                {
+                    "label": result["label"],
+                    "seed": int(result["seed"]),
+                    "requested_epsilon": result["requested_epsilon"],
+                    "achieved_epsilon": result.get("achieved_epsilon"),
+                    "noise_multiplier": result.get("noise_multiplier"),
+                    "private": result["requested_epsilon"] is not None,
+                    "train_auc": memo["train_auc"],
+                    "test_auc": memo["test_auc"],
+                    "train_bce": memo["train_loss"],
+                    "test_bce": memo["test_loss"],
+                    "train_accuracy": memo["train_accuracy"],
+                    "test_accuracy": memo["test_accuracy"],
+                    "auc_gap": memo["auc_gap"],
+                    "bce_gap": memo["loss_gap"],
+                    "accuracy_gap": memo["accuracy_gap"],
+                    "memorisation_threshold_passed": bool(result["memorisation_gate_passed"]),
+                    "lira_auc": (
+                        float(metrics["aggregate"]["auc"]) if metrics else float("nan")
+                    ),
+                    "tpr_at_1pct": (
+                        float(metrics["aggregate"][f"tpr_at_fpr_{HEADLINE_FPR}"])
+                        if metrics
+                        else float("nan")
+                    ),
+                }
+            )
+    return observations
+
+
+def _spearman(x: np.ndarray, y: np.ndarray) -> float:
+    """Spearman rank correlation, NaN when it is undefined."""
+    mask = np.isfinite(x) & np.isfinite(y)
+    if mask.sum() < 3:
+        return float("nan")
+    from scipy import stats
+
+    xr = stats.rankdata(x[mask])
+    yr = stats.rankdata(y[mask])
+    if np.std(xr) == 0 or np.std(yr) == 0:
+        return float("nan")
+    return float(np.corrcoef(xr, yr)[0, 1])
+
+
+def gap_associations(
+    observations: Sequence[dict[str, object]],
+    reps: int = 1000,
+    seed: int = 0,
+) -> dict[str, dict[str, float]]:
+    """Spearman associations with seed-stratified bootstrap intervals.
+
+    Resampling is stratified by target seed, so each replicate keeps the same
+    number of observations per seed and the interval reflects variation across
+    ladder points rather than across an arbitrary pooled sample.
+    """
+    rng = np.random.default_rng(seed)
+    seeds = sorted({int(o["seed"]) for o in observations})
+    by_seed = {s: [o for o in observations if int(o["seed"]) == s] for s in seeds}
+
+    results: dict[str, dict[str, float]] = {}
+    for gap in GAP_METRICS:
+        for leak in LEAKAGE_METRICS:
+            x = np.asarray([float(o[gap]) for o in observations], dtype=float)
+            y = np.asarray([float(o[leak]) for o in observations], dtype=float)
+            observed = _spearman(x, y)
+
+            draws = np.empty(reps, dtype=float)
+            for rep in range(reps):
+                sampled: list[dict[str, object]] = []
+                for s in seeds:
+                    pool = by_seed[s]
+                    idx = rng.integers(0, len(pool), size=len(pool))
+                    sampled.extend(pool[i] for i in idx)
+                draws[rep] = _spearman(
+                    np.asarray([float(o[gap]) for o in sampled], dtype=float),
+                    np.asarray([float(o[leak]) for o in sampled], dtype=float),
+                )
+            finite = draws[np.isfinite(draws)]
+            low, high = (
+                np.percentile(finite, [2.5, 97.5]) if finite.size else (np.nan, np.nan)
+            )
+            results[f"{gap}__{leak}"] = {
+                "gap_metric": gap,
+                "leakage_metric": leak,
+                "n_observations": int(np.sum(np.isfinite(x) & np.isfinite(y))),
+                "spearman": observed,
+                "reps": int(reps),
+                "ci95_low": float(low),
+                "ci95_high": float(high),
+            }
+    return results
+
+
 # --------------------------------------------------------------------------- #
 # One ladder point
 # --------------------------------------------------------------------------- #
@@ -550,12 +713,18 @@ def run_seed(
     bootstrap_reps: int,
     permutation_reps: int,
     epochs_override: int | None,
+    smoke: bool,
     log,
 ) -> dict[str, object]:
     """Train one target plus its shadows at one ladder point, then attack."""
-    from dp.attacks import lira_offline_attack, lira_online_attack
+    from dp.attacks import ONLINE_VARIANTS, lira_offline_attack, lira_online_attack
 
     epochs = EPOCHS if epochs_override is None else int(epochs_override)
+    # Smoke mode exists so CI can exercise the whole code path in minutes. It
+    # lowers the Gaussian floor, which the pre-registered configuration never
+    # does, so every artifact it produces is stamped `smoke: true` and the
+    # report refuses to present it as a pre-registered result.
+    min_observations = 2 if smoke else MIN_GAUSSIAN_OBSERVATIONS
 
     X_train, y_train = arrays["X_train"], arrays["y_train"]
     X_val, y_val = arrays["X_val"], arrays["y_val"]
@@ -620,9 +789,12 @@ def run_seed(
         "memorisation": metrics,
         "memorisation_gate": MEMORISATION_GATE,
         "memorisation_gate_passed": bool(gate_passed),
+        "smoke": bool(smoke),
         "attack_status": "pending",
         "offline": None,
         "online": None,
+        "online_raw_loss": None,
+        "online_logit_confidence": None,
         "online_available": False,
     }
 
@@ -631,12 +803,12 @@ def run_seed(
         f"achieved_eps={target_meta['achieved_epsilon']} "
         f"train_auc={metrics['train_auc']:.4f} test_auc={metrics['test_auc']:.4f} "
         f"auc_gap={metrics['auc_gap']:.4f} loss_gap={metrics['loss_gap']:.4f} "
-        f"gate={'PASS' if gate_passed else 'FAIL'}"
+        f"memorisation={'present' if gate_passed else 'low'} (metadata only)"
     )
-    if not gate_passed:
-        # Kept in the report as TARGET DID NOT MEMORISE, never dropped.
-        result["attack_status"] = "skipped_memorisation_gate"
-        return result
+    # Amendment 1: the attack runs at every point and seed. Memorisation is
+    # recorded as explanatory metadata, never as a condition on measurement --
+    # discarding low-memorisation observations would truncate the sample on a
+    # variable correlated with the outcome.
 
     X_pool = np.vstack([X_train, X_val, X_test])
     y_pool = np.concatenate([y_train, y_val, y_test])
@@ -700,9 +872,9 @@ def run_seed(
     min_in = min(len(v) for v in in_losses)
     if min_out != int(excluded_counts[attack_pool_idx].min()):
         raise AssertionError("recorded OUT losses do not match the schedule")
-    if min_out < MIN_GAUSSIAN_OBSERVATIONS:
+    if min_out < min_observations:
         raise RuntimeError(
-            f"offline LiRA needs >= {MIN_GAUSSIAN_OBSERVATIONS} OUT observations; got {min_out}"
+            f"offline LiRA needs >= {min_observations} OUT observations; got {min_out}"
         )
 
     out_matrix = np.vstack([np.asarray(v[:min_out], dtype=float) for v in out_losses])
@@ -736,24 +908,31 @@ def run_seed(
         }
     )
 
-    if min_in >= MIN_GAUSSIAN_OBSERVATIONS:
+    if min_in >= min_observations:
         in_matrix = np.vstack([np.asarray(v[:min_in], dtype=float) for v in in_losses])
-        online = lira_online_attack(
-            target_losses, attack_membership, in_matrix, out_matrix, fprs=ATTACK_FPRS
-        )
         result["online_available"] = True
-        result["online"] = attack_metrics(
-            attack_membership,
-            attack_groups,
-            online.scores,
-            bootstrap_reps,
-            seed + 30_000,
-            permutation_reps,
-        )
+        for offset, variant in enumerate(ONLINE_VARIANTS):
+            online = lira_online_attack(
+                target_losses,
+                attack_membership,
+                in_matrix,
+                out_matrix,
+                fprs=ATTACK_FPRS,
+                variant=variant,
+            )
+            result[variant] = attack_metrics(
+                attack_membership,
+                attack_groups,
+                online.scores,
+                bootstrap_reps,
+                seed + 30_000 + 1_000 * offset,
+                permutation_reps,
+            )
+        # Back-compatible alias: "online" is the raw-loss variant.
+        result["online"] = result["online_raw_loss"]
     else:
         result["online_unavailable_reason"] = (
-            f"only {min_in} IN observations per example; "
-            f"{MIN_GAUSSIAN_OBSERVATIONS} required"
+            f"only {min_in} IN observations per example; {min_observations} required"
         )
 
     log(
@@ -800,6 +979,7 @@ def run_point(args: argparse.Namespace) -> None:
                 bootstrap_reps=args.bootstrap_reps,
                 permutation_reps=args.permutation_reps,
                 epochs_override=args.epochs,
+                smoke=bool(args.smoke),
                 log=log,
             )
         )
@@ -816,6 +996,7 @@ def run_point(args: argparse.Namespace) -> None:
         "bootstrap_reps": int(args.bootstrap_reps),
         "permutation_reps": int(args.permutation_reps),
         "epochs": int(args.epochs) if args.epochs is not None else EPOCHS,
+        "smoke": bool(args.smoke),
         "seed_results": seed_results,
     }
     out_path = output_dir / f"{label}.json"
@@ -1037,8 +1218,30 @@ def render_markdown(payload: dict[str, object]) -> str:
     """Render the pre-registered report."""
     summaries: list[dict[str, object]] = payload["points"]
     frontier: dict[str, object] = payload["frontier"]
-    lines = [
-        "# DP-SGD detectability noise ladder",
+    lines = ["# Worst-case neural auditability ladder", ""]
+    if payload.get("smoke"):
+        lines += [
+            "> **SMOKE RUN -- NOT A PRE-REGISTERED RESULT.** Produced with a lowered "
+            "Gaussian observation floor and reduced budgets to exercise the pipeline. "
+            "No number below may be cited as a finding.",
+            "",
+        ]
+    lines += [
+        "",
+        "**Auditability ladder for a deliberately memorising neural target.** This is "
+        "not the universal DP-SGD detectability frontier: it characterises one "
+        "intentionally attackable architecture on one dataset, chosen because the "
+        "attack-power control showed it is attackable at all.",
+        "",
+        "Context from the attack-power control that motivates this design:",
+        "",
+        "| Control | Outcome |",
+        "|---|---|",
+        "| Matched-capacity MLP (mirrors the DP target recipe) | attack inconclusive -- "
+        "generalised rather than memorised |",
+        "| Deliberately memorising MLP | aggregate leakage detected |",
+        "| This ladder | effect of DP noise on an intentionally attackable neural "
+        "target |",
         "",
         "## 1. Pre-registered question and rules",
         "",
@@ -1048,15 +1251,24 @@ def render_markdown(payload: dict[str, object]) -> str:
         "Rules were fixed in `docs/NOISE_LADDER_PREREGISTRATION.md` and the adversary in "
         "`docs/THREAT_MODEL.md`, both committed before this experiment ran.",
         "",
-        f"A point is **{DETECTABLE}** only when the memorisation gate passes on all "
-        f"seeds, mean offline-LiRA AUC >= {DETECT_MEAN_AUC}, AUC > 0.5 on every seed, and "
-        f"the Holm-adjusted permutation null is rejected on >= {MIN_SIGNIFICANT_SEEDS} of "
-        f"3 seeds at alpha = {ALPHA}. Holm adjustment runs across ladder points within "
+        "**Detection rule** (unchanged from the original registration): mean "
+        f"offline-LiRA AUC >= {DETECT_MEAN_AUC}, AUC > 0.5 on every seed, and the "
+        f"Holm-adjusted permutation null rejected on >= {MIN_SIGNIFICANT_SEEDS} of 3 "
+        f"seeds at alpha = {ALPHA}. Holm adjustment runs across ladder points within "
         "each seed.",
         "",
-        f"**{UNDETECTABLE}**: gate passes, rule not met. "
-        f"**{DID_NOT_MEMORISE}**: gate fails. An undetected point is never called "
-        "private, safe or verified.",
+        "**Amendment 1**: every ladder point and seed receives the complete "
+        "matched-shadow attack. Memorisation is explanatory metadata, never an "
+        "execution gate, because discarding low-memorisation observations would "
+        "truncate the sample on a variable correlated with the outcome. Points are "
+        "classified by combining two independent decisions:",
+        "",
+        f"* `{DETECTABLE_WITH_MEMORISATION}`",
+        f"* `{DETECTABLE_LOW_MEMORISATION}`",
+        f"* `{UNDETECTABLE_WITH_MEMORISATION}`",
+        f"* `{UNDETECTABLE_LOW_MEMORISATION}`",
+        "",
+        "No point is ever called private, safe or verified.",
         "",
         "## 2. Threat model summary",
         "",
@@ -1302,12 +1514,46 @@ def render_markdown(payload: dict[str, object]) -> str:
             f"{summary['subgroup_basis']} |"
         )
 
+    # ---- Generalisation-gap association ------------------------------------ #
+    associations = payload.get("gap_associations") or {}
+    observations = payload.get("observations") or []
+    lines += [
+        "",
+        "## 10b. Generalisation gap and measured leakage",
+        "",
+        f"**{ASSOCIATION_ONLY_STATEMENT}**",
+        "",
+        f"Every seed-level observation is retained ({len(observations)} in total), "
+        "including those below the memorisation criterion. Spearman rank "
+        "correlations, with seed-stratified bootstrap intervals:",
+        "",
+        "| Generalisation gap | Leakage metric | n | Spearman rho | 95% CI |",
+        "|---|---|---:|---:|---|",
+    ]
+    for entry in associations.values():
+        lines.append(
+            f"| {entry['gap_metric']} | {entry['leakage_metric']} | "
+            f"{entry['n_observations']} | {_fmt(entry['spearman'])} | "
+            f"[{_fmt(entry['ci95_low'])}, {_fmt(entry['ci95_high'])}] |"
+        )
+    if not associations:
+        lines.append("| - | - | - | - | - |")
+    lines += [
+        "",
+        "Figures `lira_auc_vs_bce_gap.png`, `lira_auc_vs_auc_gap.png`, "
+        "`lira_auc_vs_accuracy_gap.png` and `tpr_vs_bce_gap.png` plot every "
+        "observation, distinguishing non-private from DP-SGD and "
+        "threshold-passing from low-memorisation points.",
+        "",
+        "No causal, mediation or \"beyond generalisation\" claim is made or implied.",
+    ]
+
     # ---- Conclusion -------------------------------------------------------- #
     non_private = next(
         (s for s in summaries if s["requested_epsilon"] is None), None
     )
     finite = [s for s in summaries if s["requested_epsilon"] is not None]
-    detectable_finite = [s for s in finite if s["decision"] == DETECTABLE]
+    detectable_finite = [s for s in finite if s["decision"] in DETECTABLE_STATUSES]
     supported = [s for s in summaries if s["subgroup_verdict"] == SUBGROUP_SUPPORTED]
 
     lines += ["", "## 11. Conclusion", ""]
@@ -1315,16 +1561,11 @@ def render_markdown(payload: dict[str, object]) -> str:
     lines += ["### 1. Does the attack detect aggregate leakage without DP?", ""]
     if non_private is None:
         lines.append("The non-private point was not run, so this cannot be answered here.")
-    elif non_private["decision"] == DETECTABLE:
+    elif non_private["decision"] in DETECTABLE_STATUSES:
         lines.append(
             f"Yes. The non-private target reaches mean offline-LiRA AUC "
             f"{_fmt(non_private['mean_offline_auc'])} with the Holm-adjusted permutation "
             "null rejected on the required number of seeds. The instrument works."
-        )
-    elif non_private["decision"] == DID_NOT_MEMORISE:
-        lines.append(
-            "Cannot be assessed: the non-private target failed the memorisation gate, so "
-            "there was nothing for the attack to find."
         )
     else:
         lines.append(
@@ -1366,7 +1607,7 @@ def render_markdown(payload: dict[str, object]) -> str:
         )
 
     lines += ["", "### 5. Is the insurance dataset adequate for aggregate auditing?", ""]
-    if non_private is not None and non_private["decision"] == DETECTABLE:
+    if non_private is not None and non_private["decision"] in DETECTABLE_STATUSES:
         lines.append(
             "Yes, at non-private capacity, and "
             + (
@@ -1531,6 +1772,84 @@ def make_figures(summaries: list[dict[str, object]], output_dir: Path) -> list[s
     return written
 
 
+
+def make_gap_figures(
+    observations: Sequence[dict[str, object]], output_dir: Path
+) -> list[str]:
+    """Scatter every seed-level observation of leakage against generalisation gap.
+
+    All observations appear, including those below the memorisation criterion --
+    they are the point of the amended design. Non-private and DP-SGD
+    observations use different markers; threshold-passing and low-memorisation
+    observations use filled and hollow faces.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    specs = [
+        ("bce_gap", "lira_auc", "lira_auc_vs_bce_gap.png",
+         "test - train BCE", "Offline-LiRA AUC"),
+        ("auc_gap", "lira_auc", "lira_auc_vs_auc_gap.png",
+         "train - test ROC-AUC", "Offline-LiRA AUC"),
+        ("accuracy_gap", "lira_auc", "lira_auc_vs_accuracy_gap.png",
+         "train - test accuracy", "Offline-LiRA AUC"),
+        ("bce_gap", "tpr_at_1pct", "tpr_vs_bce_gap.png",
+         "test - train BCE", "Offline-LiRA TPR @ 1% FPR"),
+    ]
+    written: list[str] = []
+    for gap, leak, filename, xlabel, ylabel in specs:
+        fig, ax = plt.subplots(figsize=(7, 4.8))
+        for private, marker, family in ((False, "s", "non-private"), (True, "o", "DP-SGD")):
+            for passed, face in ((True, "full"), (False, "none")):
+                subset = [
+                    o
+                    for o in observations
+                    if bool(o["private"]) is private
+                    and bool(o["memorisation_threshold_passed"]) is passed
+                ]
+                if not subset:
+                    continue
+                ax.scatter(
+                    [float(o[gap]) for o in subset],
+                    [float(o[leak]) for o in subset],
+                    marker=marker,
+                    s=44,
+                    facecolors="none" if face == "none" else None,
+                    edgecolors="tab:blue" if private else "tab:red",
+                    color=None if face == "none" else ("tab:blue" if private else "tab:red"),
+                    label=(
+                        f"{family}, "
+                        f"{'memorisation present' if passed else 'low memorisation'}"
+                    ),
+                )
+        if leak == "lira_auc":
+            ax.axhline(0.5, color="grey", linestyle="--", linewidth=1, label="AUC = 0.5")
+            ax.axhline(
+                DETECT_MEAN_AUC, color="darkorange", linestyle="-.", linewidth=1,
+                label=f"detection floor {DETECT_MEAN_AUC}",
+            )
+        else:
+            ax.axhline(
+                0.01, color="grey", linestyle="--", linewidth=1, label="1% random TPR"
+            )
+        ax.axvline(
+            MEMORISATION_GATE, color="green", linestyle=":", linewidth=1,
+            label=f"memorisation criterion {MEMORISATION_GATE}",
+        )
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(f"{ylabel} vs {xlabel} (association only)")
+        ax.legend(fontsize=7)
+        ax.grid(alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(output_dir / filename, dpi=150)
+        plt.close(fig)
+        written.append(filename)
+    return written
+
+
 def run_aggregate(args: argparse.Namespace) -> None:
     """Combine ladder-point artifacts into the final report."""
     root = Path(__file__).resolve().parents[1]
@@ -1581,6 +1900,10 @@ def run_aggregate(args: argparse.Namespace) -> None:
     apply_holm_across_points(points)
     summaries = summarise_points(points)
     frontier = detectability_frontier(summaries)
+    observations = collect_observations(summaries)
+    associations = gap_associations(
+        observations, reps=int(points[0].get("bootstrap_reps", 1000)), seed=7
+    )
 
     payload = {
         "experiment": "detectability_noise_ladder",
@@ -1592,15 +1915,21 @@ def run_aggregate(args: argparse.Namespace) -> None:
         "bootstrap_reps": points[0]["bootstrap_reps"],
         "permutation_reps": points[0]["permutation_reps"],
         "epochs": points[0].get("epochs", EPOCHS),
+        "smoke": any(bool(p.get("smoke")) for p in points),
         "alpha": ALPHA,
         "points": summaries,
         "frontier": frontier,
+        "observations": observations,
+        "gap_associations": associations,
+        "association_only_statement": ASSOCIATION_ONLY_STATEMENT,
     }
 
     (output_dir / "noise_ladder.json").write_text(json.dumps(payload, indent=2, default=float))
     pd.DataFrame(build_rows(summaries)).to_csv(output_dir / "noise_ladder.csv", index=False)
     (output_dir / "noise_ladder.md").write_text(render_markdown(payload))
     figures = make_figures(summaries, output_dir)
+    figures += make_gap_figures(observations, output_dir)
+    pd.DataFrame(observations).to_csv(output_dir / "observations.csv", index=False)
 
     for summary in summaries:
         log(f"[{summary['label']}] {summary['decision']} -- {summary['basis']}")
@@ -1626,6 +1955,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     point.add_argument("--bootstrap-reps", type=int, default=DEFAULT_BOOTSTRAP_REPS)
     point.add_argument("--permutation-reps", type=int, default=DEFAULT_PERMUTATION_REPS)
     point.add_argument("--epochs", type=int, default=None, help="smoke-test override")
+    point.add_argument(
+        "--smoke",
+        action="store_true",
+        help=(
+            "CI smoke mode: lowers the Gaussian observation floor so a few shadows "
+            "suffice. Stamps the artifact as smoke; never a pre-registered result."
+        ),
+    )
     point.add_argument("--output-dir", default="reports/detectability_noise_ladder/points")
     point.set_defaults(func=run_point)
 

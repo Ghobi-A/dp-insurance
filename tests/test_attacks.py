@@ -96,3 +96,125 @@ def test_lira_online_shape_validation():
         lira_online_attack(np.zeros(5), np.zeros(5), np.zeros((5, 1)), np.zeros((5, 8)))
     with pytest.raises(ValueError, match="shadow_out_losses"):
         lira_online_attack(np.zeros(5), np.zeros(5), np.zeros((5, 8)), np.zeros((5, 1)))
+
+
+# --------------------------------------------------------------------------- #
+# Online LiRA variants: raw loss vs logit-confidence transform
+# --------------------------------------------------------------------------- #
+
+
+def test_logit_confidence_is_finite_at_extreme_losses():
+    from dp.attacks import logit_confidence_from_bce
+
+    extremes = np.array([0.0, 1e-300, 1e-12, 1.0, 50.0, 700.0, 1e6, np.inf])
+    scores = logit_confidence_from_bce(extremes)
+    assert np.all(np.isfinite(scores))
+    assert not np.any(np.isnan(scores))
+
+
+def test_logit_confidence_is_strictly_decreasing_in_loss():
+    from dp.attacks import logit_confidence_from_bce
+
+    losses = np.linspace(0.0, 20.0, 200)
+    scores = logit_confidence_from_bce(losses)
+    # Lower loss (more confident on the true label) => higher logit confidence.
+    assert np.all(np.diff(scores) < 0)
+
+
+def test_logit_confidence_matches_the_specified_formula():
+    from dp.attacks import logit_confidence_from_bce
+
+    loss = 0.7
+    p = np.exp(-loss)
+    expected = np.log(p / (1 - p))
+    assert logit_confidence_from_bce(loss) == pytest.approx(expected, rel=1e-9)
+
+
+def test_logit_confidence_is_reproducible():
+    from dp.attacks import logit_confidence_from_bce
+
+    losses = np.linspace(0.01, 5.0, 50)
+    assert np.array_equal(
+        logit_confidence_from_bce(losses), logit_confidence_from_bce(losses)
+    )
+
+
+def _online_fixture(seed=0, n=200, k=12):
+    rng = np.random.default_rng(seed)
+    membership = np.array([1] * (n // 2) + [0] * (n // 2))
+    # Members have systematically lower loss under the target.
+    target = np.where(membership == 1, rng.gamma(1.0, 0.2, n), rng.gamma(2.0, 0.5, n))
+    shadow_in = rng.gamma(1.0, 0.2, size=(n, k))
+    shadow_out = rng.gamma(2.0, 0.5, size=(n, k))
+    return target, membership, shadow_in, shadow_out
+
+
+def test_both_online_variants_are_labelled_separately():
+    from dp.attacks import lira_online_attack
+
+    target, membership, sin, sout = _online_fixture()
+    raw = lira_online_attack(target, membership, sin, sout, variant="online_raw_loss")
+    transformed = lira_online_attack(
+        target, membership, sin, sout, variant="online_logit_confidence"
+    )
+    # Raw keeps the historical label; the transform gets a distinct one.
+    assert raw.method == "lira-online"
+    assert transformed.method == "lira-online-logit-confidence"
+    assert raw.method != transformed.method
+
+
+def test_online_default_variant_preserves_legacy_behaviour():
+    """The default must be byte-identical to the pre-existing raw-loss attack."""
+    from dp.attacks import lira_online_attack
+
+    target, membership, sin, sout = _online_fixture(seed=3)
+    default = lira_online_attack(target, membership, sin, sout)
+    explicit = lira_online_attack(
+        target, membership, sin, sout, variant="online_raw_loss"
+    )
+    assert np.array_equal(default.scores, explicit.scores)
+    assert default.auc == explicit.auc
+
+
+def test_online_variants_produce_finite_scores_and_correct_orientation():
+    from dp.attacks import ONLINE_VARIANTS, lira_online_attack
+
+    target, membership, sin, sout = _online_fixture(seed=5)
+    for variant in ONLINE_VARIANTS:
+        result = lira_online_attack(target, membership, sin, sout, variant=variant)
+        assert np.all(np.isfinite(result.scores))
+        # Higher score must mean more member-like.
+        assert result.scores[membership == 1].mean() > result.scores[membership == 0].mean()
+        assert result.auc > 0.5
+
+
+def test_online_variants_are_reproducible():
+    from dp.attacks import ONLINE_VARIANTS, lira_online_attack
+
+    target, membership, sin, sout = _online_fixture(seed=11)
+    for variant in ONLINE_VARIANTS:
+        first = lira_online_attack(target, membership, sin, sout, variant=variant)
+        second = lira_online_attack(target, membership, sin, sout, variant=variant)
+        assert np.array_equal(first.scores, second.scores)
+
+
+def test_online_variant_survives_zero_and_huge_losses():
+    from dp.attacks import lira_online_attack
+
+    n, k = 40, 12
+    membership = np.array([1] * 20 + [0] * 20)
+    target = np.where(membership == 1, 0.0, 500.0)
+    shadow_in = np.zeros((n, k)) + np.linspace(0, 1e-6, k)
+    shadow_out = np.full((n, k), 500.0) + np.linspace(0, 1e-6, k)
+    result = lira_online_attack(
+        target, membership, shadow_in, shadow_out, variant="online_logit_confidence"
+    )
+    assert np.all(np.isfinite(result.scores))
+
+
+def test_online_rejects_unknown_variant():
+    from dp.attacks import lira_online_attack
+
+    target, membership, sin, sout = _online_fixture()
+    with pytest.raises(ValueError, match="unknown variant"):
+        lira_online_attack(target, membership, sin, sout, variant="not-a-variant")

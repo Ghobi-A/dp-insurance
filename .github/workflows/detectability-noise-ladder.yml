@@ -24,6 +24,7 @@ on:
   pull_request:
     paths:
       - research/detectability_noise_ladder.py
+      - research/canary_pilot.py
       - tests/test_detectability_noise_ladder.py
       - docs/THREAT_MODEL.md
       - docs/NOISE_LADDER_PREREGISTRATION.md
@@ -34,8 +35,56 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Pull requests get lint, unit tests and a reduced smoke run only. The full
+  # six-point experiment costs hours of runner time and must never start from a
+  # PR event -- it runs on explicit workflow_dispatch alone.
+  validate:
+    name: Lint, tests and reduced smoke run
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[experimental,dev]"
+      - name: Ruff lint
+        run: ruff check src tests research/detectability_noise_ladder.py research/canary_pilot.py
+      - name: Unit tests
+        run: python -m pytest tests/ -q -m "not slow"
+      - name: Reduced smoke run (two points, one seed, tiny budgets)
+        run: |
+          mkdir -p /tmp/smoke/points
+          python research/detectability_noise_ladder.py point \
+            --seeds 42 --shadows 8 --epochs 5 --smoke \
+            --bootstrap-reps 50 --permutation-reps 50 \
+            --output-dir /tmp/smoke/points
+          python research/detectability_noise_ladder.py point \
+            --epsilon 8 --seeds 42 --shadows 8 --epochs 5 --smoke \
+            --bootstrap-reps 50 --permutation-reps 50 \
+            --output-dir /tmp/smoke/points
+          python research/detectability_noise_ladder.py aggregate \
+            --input-dir /tmp/smoke/points --output-dir /tmp/smoke/out
+          test -f /tmp/smoke/out/noise_ladder.md
+          test -f /tmp/smoke/out/lira_auc_vs_bce_gap.png
+          ! grep -q skipped_memorisation_gate /tmp/smoke/out/noise_ladder.md
+      - name: Upload smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ladder-smoke
+          path: /tmp/smoke/out
+          if-no-files-found: warn
+
   ladder-point:
     name: "point ${{ matrix.label }}"
+    # Full experiment: manual dispatch only.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # 400-epoch DP-SGD shadow training: 33 models per seed, 3 seeds per point.
     timeout-minutes: 350
@@ -96,8 +145,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: ladder-point
     # Runs even if a point failed, so the aggregation step reports precisely
-    # which point is missing instead of the job silently not existing.
-    if: always()
+    # which point is missing instead of the job silently not existing -- but
+    # only for the dispatched full ladder, never for a pull request.
+    if: always() && github.event_name == 'workflow_dispatch'
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
