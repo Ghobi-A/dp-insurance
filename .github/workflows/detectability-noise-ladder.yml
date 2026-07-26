@@ -1,0 +1,156 @@
+name: Detectability noise ladder
+
+# Manual dispatch, plus PRs that touch the ladder itself. Never on push to main:
+# one full ladder is six points x three seeds x 33 models at 400 epochs.
+on:
+  workflow_dispatch:
+    inputs:
+      seeds:
+        description: Space-separated target seeds
+        required: false
+        default: "42 43 44"
+      shadows:
+        description: Shadow models per ladder point and seed
+        required: false
+        default: "32"
+      bootstrap_reps:
+        description: Stratified bootstrap replicates
+        required: false
+        default: "1000"
+      permutation_reps:
+        description: Stratified membership permutation replicates
+        required: false
+        default: "1000"
+  pull_request:
+    paths:
+      - research/detectability_noise_ladder.py
+      - tests/test_detectability_noise_ladder.py
+      - docs/THREAT_MODEL.md
+      - docs/NOISE_LADDER_PREREGISTRATION.md
+      - .github/workflows/detectability-noise-ladder.yml
+
+concurrency:
+  group: noise-ladder-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ladder-point:
+    name: "point ${{ matrix.label }}"
+    runs-on: ubuntu-latest
+    # 400-epoch DP-SGD shadow training: 33 models per seed, 3 seeds per point.
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: non-private
+            epsilon: "0"
+          - label: eps32
+            epsilon: "32"
+          - label: eps16
+            epsilon: "16"
+          - label: eps8
+            epsilon: "8"
+          - label: eps4
+            epsilon: "4"
+          - label: eps2
+            epsilon: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[experimental]"
+      - name: Run ladder point ${{ matrix.label }}
+        shell: bash
+        run: |
+          mkdir -p reports/detectability_noise_ladder/points
+          set +e
+          python research/detectability_noise_ladder.py point \
+            --epsilon "${{ matrix.epsilon }}" \
+            --seeds ${{ github.event.inputs.seeds || '42 43 44' }} \
+            --shadows "${{ github.event.inputs.shadows || '32' }}" \
+            --bootstrap-reps "${{ github.event.inputs.bootstrap_reps || '1000' }}" \
+            --permutation-reps "${{ github.event.inputs.permutation_reps || '1000' }}" \
+            --output-dir reports/detectability_noise_ladder/points \
+            2>&1 | tee reports/detectability_noise_ladder/points/${{ matrix.label }}.console.log
+          status=${PIPESTATUS[0]}
+          echo "exit_status=$status" \
+            >> reports/detectability_noise_ladder/points/${{ matrix.label }}.console.log
+          exit "$status"
+      - name: Upload ladder point artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ladder-point-${{ matrix.label }}
+          path: reports/detectability_noise_ladder/points
+          if-no-files-found: warn
+
+  aggregate:
+    name: Aggregate ladder and build report
+    runs-on: ubuntu-latest
+    needs: ladder-point
+    # Runs even if a point failed, so the aggregation step reports precisely
+    # which point is missing instead of the job silently not existing.
+    if: always()
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[experimental]"
+      - name: Download every ladder-point artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ladder-point-*
+          path: reports/detectability_noise_ladder/points
+          merge-multiple: true
+      - name: List downloaded points
+        run: ls -la reports/detectability_noise_ladder/points || true
+      - name: Aggregate, adjust and report
+        shell: bash
+        run: |
+          set +e
+          python research/detectability_noise_ladder.py aggregate \
+            --input-dir reports/detectability_noise_ladder/points \
+            --output-dir reports/detectability_noise_ladder \
+            --expect-all \
+            2>&1 | tee reports/detectability_noise_ladder/aggregate.console.log
+          status=${PIPESTATUS[0]}
+          echo "exit_status=$status" >> reports/detectability_noise_ladder/aggregate.console.log
+          exit "$status"
+      - name: Append report to workflow summary
+        if: always()
+        run: |
+          if [ -f reports/detectability_noise_ladder/noise_ladder.md ]; then
+            cat reports/detectability_noise_ladder/noise_ladder.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '## Noise ladder aggregation did not produce a report' \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f reports/detectability_noise_ladder/aggregate.console.log ]; then
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 60 reports/detectability_noise_ladder/aggregate.console.log \
+              >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # Results are uploaded as artifacts only. Nothing is committed back to the
+      # repository and no pull request is merged by this workflow.
+      - name: Upload complete ladder results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detectability-noise-ladder
+          path: reports/detectability_noise_ladder
+          if-no-files-found: warn
