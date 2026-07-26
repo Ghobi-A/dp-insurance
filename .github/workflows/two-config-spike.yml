@@ -6,6 +6,7 @@ on:
       - research/two-config-spike
     paths:
       - research/two_config_spike.py
+      - research/powered_spike_runner.py
       - .github/workflows/two-config-spike.yml
       - src/dp/**
       - data/insurance.csv
@@ -15,6 +16,7 @@ on:
       - main
     paths:
       - research/two_config_spike.py
+      - research/powered_spike_runner.py
       - .github/workflows/two-config-spike.yml
       - src/dp/**
       - data/insurance.csv
@@ -54,7 +56,7 @@ jobs:
         run: |
           mkdir -p reports/spike
           set +e
-          python research/two_config_spike.py \
+          python research/powered_spike_runner.py \
             --shadows "${{ github.event.inputs.shadows || '32' }}" \
             --seeds ${{ github.event.inputs.seeds || '42 43 44' }} \
             --bootstrap-reps "${{ github.event.inputs.bootstrap_reps || '1000' }}" \
