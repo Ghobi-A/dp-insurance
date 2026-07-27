@@ -111,6 +111,37 @@ def loss_threshold_attack(
     )
 
 
+#: Recognised per-example statistics for the online attack.
+ONLINE_VARIANTS = ("online_raw_loss", "online_logit_confidence")
+
+
+def logit_confidence_from_bce(losses: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    """Map per-example binary cross-entropy to a logit-confidence scale.
+
+    For a binary cross-entropy ``L``, the model's probability on the *true*
+    label is ``p = exp(-L)``. Carlini et al. (2022) fit their Gaussians to
+    ``logit(p) = log(p / (1 - p))`` rather than to ``p`` or to the loss itself,
+    because probabilities pile up against 0 and 1 and raw losses are
+    heavy-tailed, while the logit scale is far closer to Gaussian and has
+    roughly homogeneous per-example variance.
+
+    ``p`` is clipped away from both endpoints, so a zero loss (``p = 1``) or a
+    very large loss (``p -> 0``) yields a large finite score rather than an
+    infinity. The mapping is strictly increasing in ``p`` and therefore strictly
+    *decreasing* in the loss: a lower loss gives a higher logit confidence.
+
+    Args:
+        losses: Any shape. Per-example binary cross-entropy, non-negative.
+        eps: Clip applied to ``p`` on both sides.
+
+    Returns:
+        An array of the same shape, finite everywhere.
+    """
+    losses = np.asarray(losses, dtype=float)
+    p = np.clip(np.exp(-losses), eps, 1.0 - eps)
+    return np.log(p) - np.log1p(-p)
+
+
 def lira_offline_attack(
     target_losses: np.ndarray,
     membership: np.ndarray,
@@ -181,6 +212,7 @@ def lira_online_attack(
     shadow_out_losses: np.ndarray,
     fprs=(0.001, 0.01, 0.1),
     eps: float = 1e-12,
+    variant: str = "online_raw_loss",
 ) -> AttackResult:
     """Online Likelihood-Ratio Attack (Carlini et al. 2022, §IV).
 
@@ -209,13 +241,22 @@ def lira_online_attack(
             losses from shadow models trained *without* it.
         fprs: False-positive rates at which to report TPR.
         eps: Floor on the fitted standard deviations for numerical stability.
+        variant: Which per-example statistic the Gaussians are fitted to.
+            ``"online_raw_loss"`` (default) preserves the original behaviour and
+            fits to the raw cross-entropy losses. ``"online_logit_confidence"``
+            first maps each loss through :func:`logit_confidence_from_bce`, the
+            variance-stabilising transform Carlini et al. apply before fitting.
+            Raw BCE is heavy-tailed and its per-example spread varies widely, so
+            a likelihood ratio divided by a badly-estimated per-example sigma can
+            rank acceptably on average while calibrating poorly in the extreme
+            tail — which is where TPR at low FPR is read.
 
     Returns:
-        An :class:`AttackResult`.
+        An :class:`AttackResult`. ``method`` records which variant was used.
 
     Raises:
-        ValueError: On shape mismatches or fewer than 2 shadow samples on
-            either side.
+        ValueError: On shape mismatches, fewer than 2 shadow samples on either
+            side, or an unknown ``variant``.
 
     Reference:
         Carlini, Chien, Nasr, Song, Terzis, Tramèr (2022). "Membership
@@ -240,6 +281,16 @@ def lira_online_attack(
         raise ValueError("shadow_in_losses must be (n, k) with k >= 2 shadow models")
     if shadow_out_losses.ndim != 2 or shadow_out_losses.shape[1] < 2:
         raise ValueError("shadow_out_losses must be (n, k) with k >= 2 shadow models")
+    if variant not in ONLINE_VARIANTS:
+        raise ValueError(
+            f"unknown variant {variant!r}; expected one of {sorted(ONLINE_VARIANTS)}"
+        )
+
+    if variant == "online_logit_confidence":
+        # Applied identically to target, IN and OUT so the three are comparable.
+        target_losses = logit_confidence_from_bce(target_losses)
+        shadow_in_losses = logit_confidence_from_bce(shadow_in_losses)
+        shadow_out_losses = logit_confidence_from_bce(shadow_out_losses)
 
     mu_in = shadow_in_losses.mean(axis=1)
     sigma_in = np.maximum(shadow_in_losses.std(axis=1, ddof=1), eps)
@@ -257,5 +308,11 @@ def lira_online_attack(
         tpr_at_fpr=_tpr_at_fpr(membership, scores, fprs),
         scores=scores,
         membership=membership,
-        method="lira-online",
+        # The raw-loss variant keeps its historical name so existing callers and
+        # stored results stay valid; only the new transform gets a new label.
+        method=(
+            "lira-online"
+            if variant == "online_raw_loss"
+            else "lira-online-logit-confidence"
+        ),
     )
