@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -71,3 +73,11 @@ def test_group_rate_rows_extracts_group_name():
 def test_configuration_label_includes_achieved_epsilon():
     label = configuration_label(pd.Series({"model": "dpsgd", "epsilon": 1.9979}))
     assert label == "DP-SGD neural network (ε=2.00)"
+
+
+def test_committed_summary_supports_dashboard_headlines():
+    root = Path(__file__).resolve().parents[1]
+    summary = load_summary(root / "reports" / "generated" / "summary.csv")
+    stats = headline_statistics(summary)
+    assert stats["legacy_roc_auc"] > stats["corrected_roc_auc"]
+    assert 0.0 < stats["high_cost_retention"] <= 1.05
