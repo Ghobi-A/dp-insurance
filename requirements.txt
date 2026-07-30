@@ -1,3 +1,5 @@
+-e .[app]
+
 # Known-good pinned versions (verified by executing the full notebook and test
 # suite). For flexible ranges, install via `pip install -e .` instead.
 numpy==1.24.3

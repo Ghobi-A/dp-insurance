@@ -23,6 +23,10 @@ experimental = [
     "torch>=2.0",
     "opacus>=1.4",
 ]
+app = [
+    "streamlit>=1.36",
+    "altair>=5.2",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
