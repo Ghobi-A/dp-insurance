@@ -1,0 +1,2650 @@
+{
+  "experiment": "attack_power_control",
+  "task": "high_cost",
+  "sensitive_attribute": "sex",
+  "private": false,
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "num_shadows": 32,
+  "bootstrap_reps": 1000,
+  "permutation_reps": 1000,
+  "alpha": 0.05,
+  "memorisation_gate": 0.03,
+  "controls": [
+    {
+      "name": "matched_capacity_mlp",
+      "kind": "mlp",
+      "description": "Non-private MLP with the same architecture, optimiser family, learning rate and epoch count as the DP-SGD target recipe.",
+      "positive_control": false,
+      "hidden_units": [
+        32
+      ],
+      "epochs": 30,
+      "batch_size": 64,
+      "learning_rate": 0.01,
+      "tree_kwargs": {},
+      "architecture": "Linear(input_dim, 32 -> 1) with ReLU between layers"
+    },
+    {
+      "name": "memorising_mlp",
+      "kind": "mlp",
+      "description": "Deliberately over-parameterised MLP trained far longer than needed, with no dropout, weight decay or early stopping.",
+      "positive_control": true,
+      "hidden_units": [
+        128,
+        128,
+        64
+      ],
+      "epochs": 400,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "tree_kwargs": {},
+      "architecture": "Linear(input_dim, 128 -> 128 -> 64 -> 1) with ReLU between layers"
+    },
+    {
+      "name": "unbounded_decision_tree",
+      "kind": "tree",
+      "description": "Unconstrained decision tree grown to purity; the strongest memorising positive control available in this repository.",
+      "positive_control": true,
+      "hidden_units": [],
+      "epochs": 0,
+      "batch_size": 0,
+      "learning_rate": 0.01,
+      "tree_kwargs": {
+        "max_depth": null,
+        "min_samples_leaf": 1,
+        "min_samples_split": 2
+      },
+      "architecture": "DecisionTreeClassifier(max_depth=None, min_samples_leaf=1, min_samples_split=2)"
+    }
+  ],
+  "seed_results": [
+    {
+      "control": "matched_capacity_mlp",
+      "kind": "mlp",
+      "architecture": "Linear(input_dim, 32 -> 1) with ReLU between layers",
+      "positive_control": false,
+      "seed": 42,
+      "train_size": 856,
+      "val_size": 214,
+      "test_size": 268,
+      "cohort_counts": {
+        "female|member=0": 128,
+        "female|member=1": 128,
+        "male|member=0": 128,
+        "male|member=1": 128
+      },
+      "num_attack_examples": 512,
+      "memorisation": {
+        "train_auc": 0.9766491614988209,
+        "test_auc": 0.9614301801801802,
+        "train_loss": 0.15639105862966807,
+        "test_loss": 0.1690391373973618,
+        "train_accuracy": 0.9485981308411215,
+        "test_accuracy": 0.9514925373134329,
+        "auc_gap": 0.015218981318640634,
+        "loss_gap": 0.012648078767693721,
+        "accuracy_gap": -0.002894406472311317
+      },
+      "memorisation_gate": 0.03,
+      "memorisation_gate_passed": false,
+      "attack_status": "skipped_memorisation_gate",
+      "offline": null,
+      "online": null,
+      "online_available": false
+    },
+    {
+      "control": "matched_capacity_mlp",
+      "kind": "mlp",
+      "architecture": "Linear(input_dim, 32 -> 1) with ReLU between layers",
+      "positive_control": false,
+      "seed": 43,
+      "train_size": 856,
+      "val_size": 214,
+      "test_size": 268,
+      "cohort_counts": {
+        "female|member=0": 129,
+        "female|member=1": 129,
+        "male|member=0": 129,
+        "male|member=1": 129
+      },
+      "num_attack_examples": 516,
+      "memorisation": {
+        "train_auc": 0.9748122106734212,
+        "test_auc": 0.9209260202637686,
+        "train_loss": 0.15492961206088177,
+        "test_loss": 0.31138565900129556,
+        "train_accuracy": 0.9532710280373832,
+        "test_accuracy": 0.9067164179104478,
+        "auc_gap": 0.05388619040965259,
+        "loss_gap": 0.1564560469404138,
+        "accuracy_gap": 0.0465546101269354
+      },
+      "memorisation_gate": 0.03,
+      "memorisation_gate_passed": true,
+      "attack_status": "completed",
+      "offline": {
+        "aggregate": {
+          "auc": 0.5282885643891593,
+          "tpr_at_fpr_0.001": 0.0,
+          "tpr_at_fpr_0.01": 0.0,
+          "tpr_at_fpr_0.1": 0.09302325581395349,
+          "operating_point": {
+            "threshold": Infinity,
+            "detected_members": 0,
+            "false_positives": 0,
+            "n_members": 258,
+            "n_nonmembers": 258
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.5561564809807102,
+            "tpr_at_fpr_0.001": 0.0,
+            "tpr_at_fpr_0.01": 0.007751937984496124,
+            "tpr_at_fpr_0.1": 0.10852713178294573,
+            "operating_point": {
+              "threshold": 2.7616375317403756,
+              "detected_members": 1,
+              "false_positives": 1,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          },
+          "male": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.5034553211946398,
+            "tpr_at_fpr_0.001": 0.0,
+            "tpr_at_fpr_0.01": 0.0,
+            "tpr_at_fpr_0.1": 0.06976744186046512,
+            "operating_point": {
+              "threshold": Infinity,
+              "detected_members": 0,
+              "false_positives": 0,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          }
+        },
+        "signed_subgroup_difference": -0.007751937984496124,
+        "absolute_subgroup_gap": 0.007751937984496124,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.004054263565891473,
+            "ci95_low": 0.0,
+            "ci95_high": 0.027131782945736434
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.010751937984496123,
+            "ci95_low": 0.0,
+            "ci95_high": 0.046511627906976744
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.009635658914728683,
+            "ci95_low": 0.0,
+            "ci95_high": 0.046511627906976744
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": -0.0011162790697674418,
+            "ci95_low": -0.03875968992248062,
+            "ci95_high": 0.03875968992248062
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.014186046511627907,
+            "ci95_low": 0.0,
+            "ci95_high": 0.046511627906976744
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.5282885643891593,
+            "null_mean": 0.500164428219458,
+            "null_ci95_low": 0.45029407787993514,
+            "null_ci95_high": 0.5474584610299862,
+            "alternative": "greater",
+            "p_value": 0.13786213786213786
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": 0.011558139534883723,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03875968992248062,
+            "alternative": "greater",
+            "p_value": 1.0
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": -0.007751937984496124,
+            "null_mean": 0.0018914728682170546,
+            "null_ci95_low": -0.03875968992248062,
+            "null_ci95_high": 0.046511627906976744,
+            "alternative": "two-sided",
+            "p_value": 0.8211788211788211
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.007751937984496124,
+            "null_mean": 0.01598449612403101,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05426356589147287,
+            "alternative": "greater",
+            "p_value": 0.8211788211788211
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.007751937984496124,
+            "null_mean": 0.014496124031007753,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05426356589147287,
+            "alternative": "greater",
+            "p_value": 0.7312687312687313
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": 0.016387596899224807,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05426356589147287,
+            "alternative": "greater",
+            "p_value": 1.0
+          }
+        }
+      },
+      "online": {
+        "aggregate": {
+          "auc": 0.5131828015143322,
+          "tpr_at_fpr_0.001": 0.003875968992248062,
+          "tpr_at_fpr_0.01": 0.003875968992248062,
+          "tpr_at_fpr_0.1": 0.10077519379844961,
+          "operating_point": {
+            "threshold": 42.936672401357384,
+            "detected_members": 1,
+            "false_positives": 0,
+            "n_members": 258,
+            "n_nonmembers": 258
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.5474731085872243,
+            "tpr_at_fpr_0.001": 0.0,
+            "tpr_at_fpr_0.01": 0.007751937984496124,
+            "tpr_at_fpr_0.1": 0.07751937984496124,
+            "operating_point": {
+              "threshold": 13.112412244104489,
+              "detected_members": 1,
+              "false_positives": 1,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          },
+          "male": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.4800793221561205,
+            "tpr_at_fpr_0.001": 0.007751937984496124,
+            "tpr_at_fpr_0.01": 0.007751937984496124,
+            "tpr_at_fpr_0.1": 0.11627906976744186,
+            "operating_point": {
+              "threshold": 42.936672401357384,
+              "detected_members": 1,
+              "false_positives": 0,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.0,
+        "absolute_subgroup_gap": 0.0,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.009709302325581398,
+            "ci95_low": 0.0,
+            "ci95_high": 0.031007751937984496
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.012651162790697676,
+            "ci95_low": 0.0,
+            "ci95_high": 0.046511627906976744
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.015410852713178297,
+            "ci95_low": 0.0,
+            "ci95_high": 0.05426356589147287
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": 0.0027596899224806206,
+            "ci95_low": -0.03875968992248062,
+            "ci95_high": 0.046511627906976744
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.01565891472868217,
+            "ci95_low": 0.0,
+            "ci95_high": 0.05426356589147287
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.5131828015143322,
+            "null_mean": 0.49954606844540594,
+            "null_ci95_low": 0.45276050117180455,
+            "null_ci95_high": 0.551682403401238,
+            "alternative": "greater",
+            "p_value": 0.2967032967032967
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.003875968992248062,
+            "null_mean": 0.011062015503875968,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.031007751937984496,
+            "alternative": "greater",
+            "p_value": 0.8721278721278721
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": -0.0011007751937984493,
+            "null_ci95_low": -0.046511627906976744,
+            "null_ci95_high": 0.03875968992248062,
+            "alternative": "two-sided",
+            "p_value": 1.0
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": 0.014930232558139536,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.04670542635658897,
+            "alternative": "greater",
+            "p_value": 1.0
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.007751937984496124,
+            "null_mean": 0.01544186046511628,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05426356589147287,
+            "alternative": "greater",
+            "p_value": 0.7572427572427572
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.007751937984496124,
+            "null_mean": 0.01434108527131783,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.046511627906976744,
+            "alternative": "greater",
+            "p_value": 0.7492507492507493
+          }
+        }
+      },
+      "online_available": true,
+      "num_shadows": 32,
+      "shadow_train_size": 856,
+      "min_out_observations": 11,
+      "min_in_observations": 20
+    },
+    {
+      "control": "matched_capacity_mlp",
+      "kind": "mlp",
+      "architecture": "Linear(input_dim, 32 -> 1) with ReLU between layers",
+      "positive_control": false,
+      "seed": 44,
+      "train_size": 856,
+      "val_size": 214,
+      "test_size": 268,
+      "cohort_counts": {
+        "female|member=0": 131,
+        "female|member=1": 131,
+        "male|member=0": 131,
+        "male|member=1": 131
+      },
+      "num_attack_examples": 524,
+      "memorisation": {
+        "train_auc": 0.9710127522054327,
+        "test_auc": 0.9301339285714285,
+        "train_loss": 0.17522889382960657,
+        "test_loss": 0.24487714414278658,
+        "train_accuracy": 0.9450934579439252,
+        "test_accuracy": 0.9328358208955224,
+        "auc_gap": 0.04087882363400419,
+        "loss_gap": 0.06964825031318,
+        "accuracy_gap": 0.01225763704840277
+      },
+      "memorisation_gate": 0.03,
+      "memorisation_gate_passed": true,
+      "attack_status": "completed",
+      "offline": {
+        "aggregate": {
+          "auc": 0.5082818600314667,
+          "tpr_at_fpr_0.001": 0.011450381679389313,
+          "tpr_at_fpr_0.01": 0.015267175572519083,
+          "tpr_at_fpr_0.1": 0.10305343511450382,
+          "operating_point": {
+            "threshold": 2.472094960371088,
+            "detected_members": 4,
+            "false_positives": 1,
+            "n_members": 262,
+            "n_nonmembers": 262
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.49734863935668083,
+            "tpr_at_fpr_0.001": 0.022900763358778626,
+            "tpr_at_fpr_0.01": 0.030534351145038167,
+            "tpr_at_fpr_0.1": 0.10687022900763359,
+            "operating_point": {
+              "threshold": 2.472094960371088,
+              "detected_members": 4,
+              "false_positives": 1,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          },
+          "male": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.5211234776528174,
+            "tpr_at_fpr_0.001": 0.0,
+            "tpr_at_fpr_0.01": 0.030534351145038167,
+            "tpr_at_fpr_0.1": 0.11450381679389313,
+            "operating_point": {
+              "threshold": 1.9630839200137022,
+              "detected_members": 4,
+              "false_positives": 1,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.0,
+        "absolute_subgroup_gap": 0.0,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.0148587786259542,
+            "ci95_low": 0.003816793893129771,
+            "ci95_high": 0.03435114503816794
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.028145038167938934,
+            "ci95_low": 0.0,
+            "ci95_high": 0.06125954198473265
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.0286793893129771,
+            "ci95_low": 0.0,
+            "ci95_high": 0.07633587786259542
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": 0.0005343511450381682,
+            "ci95_low": -0.05343511450381679,
+            "ci95_high": 0.0534351145038168
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.023251908396946568,
+            "ci95_low": 0.0,
+            "ci95_high": 0.061068702290076333
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.5082818600314667,
+            "null_mean": 0.5007007531612376,
+            "null_ci95_low": 0.4506333401316939,
+            "null_ci95_high": 0.5525721476021211,
+            "alternative": "greater",
+            "p_value": 0.36363636363636365
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.015267175572519083,
+            "null_mean": 0.011259541984732828,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03435114503816794,
+            "alternative": "greater",
+            "p_value": 0.34165834165834164
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": 0.000267175572519084,
+            "null_ci95_low": -0.03816793893129771,
+            "null_ci95_high": 0.04580152671755725,
+            "alternative": "two-sided",
+            "p_value": 1.0
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": 0.015778625954198475,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05343511450381679,
+            "alternative": "greater",
+            "p_value": 1.0
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.030534351145038167,
+            "null_mean": 0.015152671755725194,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05343511450381679,
+            "alternative": "greater",
+            "p_value": 0.19080919080919082
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.030534351145038167,
+            "null_mean": 0.015419847328244276,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05343511450381679,
+            "alternative": "greater",
+            "p_value": 0.2017982017982018
+          }
+        }
+      },
+      "online": {
+        "aggregate": {
+          "auc": 0.5044723500961482,
+          "tpr_at_fpr_0.001": 0.003816793893129771,
+          "tpr_at_fpr_0.01": 0.019083969465648856,
+          "tpr_at_fpr_0.1": 0.0916030534351145,
+          "operating_point": {
+            "threshold": 25.99014999369852,
+            "detected_members": 5,
+            "false_positives": 1,
+            "n_members": 262,
+            "n_nonmembers": 262
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.5305343511450381,
+            "tpr_at_fpr_0.001": 0.007633587786259542,
+            "tpr_at_fpr_0.01": 0.030534351145038167,
+            "tpr_at_fpr_0.1": 0.13740458015267176,
+            "operating_point": {
+              "threshold": 34.18008387220341,
+              "detected_members": 4,
+              "false_positives": 1,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          },
+          "male": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.4797505972845405,
+            "tpr_at_fpr_0.001": 0.007633587786259542,
+            "tpr_at_fpr_0.01": 0.022900763358778626,
+            "tpr_at_fpr_0.1": 0.05343511450381679,
+            "operating_point": {
+              "threshold": 8.445640950354237,
+              "detected_members": 3,
+              "false_positives": 1,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          }
+        },
+        "signed_subgroup_difference": -0.007633587786259541,
+        "absolute_subgroup_gap": 0.007633587786259541,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.02126335877862596,
+            "ci95_low": 0.0,
+            "ci95_high": 0.04580152671755725
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.02688549618320611,
+            "ci95_low": 0.0,
+            "ci95_high": 0.06870229007633588
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.020167938931297712,
+            "ci95_low": 0.0,
+            "ci95_high": 0.05343511450381679
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": -0.006717557251908398,
+            "ci95_low": -0.0534351145038168,
+            "ci95_high": 0.03816793893129771
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.019587786259541985,
+            "ci95_low": 0.0,
+            "ci95_high": 0.0534351145038168
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.5044723500961482,
+            "null_mean": 0.49924753073830197,
+            "null_ci95_low": 0.4507109142823845,
+            "null_ci95_high": 0.5501485927393508,
+            "alternative": "greater",
+            "p_value": 0.41058941058941056
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.019083969465648856,
+            "null_mean": 0.01118702290076336,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03435114503816794,
+            "alternative": "greater",
+            "p_value": 0.2087912087912088
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": -0.007633587786259541,
+            "null_mean": 0.0014885496183206107,
+            "null_ci95_low": -0.04580152671755725,
+            "null_ci95_high": 0.04580152671755725,
+            "alternative": "two-sided",
+            "p_value": 0.8031968031968032
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.007633587786259541,
+            "null_mean": 0.015763358778625957,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.0534351145038168,
+            "alternative": "greater",
+            "p_value": 0.8031968031968032
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.030534351145038167,
+            "null_mean": 0.01451908396946565,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05343511450381679,
+            "alternative": "greater",
+            "p_value": 0.17382617382617382
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.022900763358778626,
+            "null_mean": 0.016007633587786257,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.061068702290076333,
+            "alternative": "greater",
+            "p_value": 0.3226773226773227
+          }
+        }
+      },
+      "online_available": true,
+      "num_shadows": 32,
+      "shadow_train_size": 856,
+      "min_out_observations": 11,
+      "min_in_observations": 20
+    },
+    {
+      "control": "memorising_mlp",
+      "kind": "mlp",
+      "architecture": "Linear(input_dim, 128 -> 128 -> 64 -> 1) with ReLU between layers",
+      "positive_control": true,
+      "seed": 42,
+      "train_size": 856,
+      "val_size": 214,
+      "test_size": 268,
+      "cohort_counts": {
+        "female|member=0": 128,
+        "female|member=1": 128,
+        "male|member=0": 128,
+        "male|member=1": 128
+      },
+      "num_attack_examples": 512,
+      "memorisation": {
+        "train_auc": 0.9998990086470435,
+        "test_auc": 0.9407376126126125,
+        "train_loss": 0.015321061856631154,
+        "test_loss": 0.7610822734686455,
+        "train_accuracy": 0.9964953271028038,
+        "test_accuracy": 0.9029850746268657,
+        "auc_gap": 0.059161396034431046,
+        "loss_gap": 0.7457612116120144,
+        "accuracy_gap": 0.09351025247593803
+      },
+      "memorisation_gate": 0.03,
+      "memorisation_gate_passed": true,
+      "attack_status": "completed",
+      "offline": {
+        "aggregate": {
+          "auc": 0.5858612060546875,
+          "tpr_at_fpr_0.001": 0.046875,
+          "tpr_at_fpr_0.01": 0.0546875,
+          "tpr_at_fpr_0.1": 0.20703125,
+          "operating_point": {
+            "threshold": 1.2758005408963773,
+            "detected_members": 14,
+            "false_positives": 2,
+            "n_members": 256,
+            "n_nonmembers": 256
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 256,
+            "members": 128,
+            "nonmembers": 128,
+            "auc": 0.5318603515625,
+            "tpr_at_fpr_0.001": 0.0234375,
+            "tpr_at_fpr_0.01": 0.0234375,
+            "tpr_at_fpr_0.1": 0.125,
+            "operating_point": {
+              "threshold": 2.103706971922299,
+              "detected_members": 3,
+              "false_positives": 0,
+              "n_members": 128,
+              "n_nonmembers": 128
+            }
+          },
+          "male": {
+            "n": 256,
+            "members": 128,
+            "nonmembers": 128,
+            "auc": 0.6361083984375,
+            "tpr_at_fpr_0.001": 0.078125,
+            "tpr_at_fpr_0.01": 0.0859375,
+            "tpr_at_fpr_0.1": 0.3125,
+            "operating_point": {
+              "threshold": 1.2758005408963773,
+              "detected_members": 11,
+              "false_positives": 1,
+              "n_members": 128,
+              "n_nonmembers": 128
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.0625,
+        "absolute_subgroup_gap": 0.0625,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.0540546875,
+            "ci95_low": 0.02734375,
+            "ci95_high": 0.08203125
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.025640625,
+            "ci95_low": 0.0,
+            "ci95_high": 0.0546875
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.1016953125,
+            "ci95_low": 0.0390625,
+            "ci95_high": 0.21875
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": 0.0760546875,
+            "ci95_low": 0.0078125,
+            "ci95_high": 0.203125
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.0761953125,
+            "ci95_low": 0.0078125,
+            "ci95_high": 0.203125
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.5858612060546875,
+            "null_mean": 0.5004575576782226,
+            "null_ci95_low": 0.45152873992919923,
+            "null_ci95_high": 0.5536762237548828,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.0546875,
+            "null_mean": 0.01178515625,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03515625,
+            "alternative": "greater",
+            "p_value": 0.003996003996003996
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.0625,
+            "null_mean": 0.000265625,
+            "null_ci95_low": -0.0390625,
+            "null_ci95_high": 0.046875,
+            "alternative": "two-sided",
+            "p_value": 0.015984015984015984
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.0625,
+            "null_mean": 0.01628125,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.046875,
+            "alternative": "greater",
+            "p_value": 0.015984015984015984
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.0234375,
+            "null_mean": 0.01521875,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.04707031249999982,
+            "alternative": "greater",
+            "p_value": 0.2987012987012987
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.0859375,
+            "null_mean": 0.015484375,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.0546875,
+            "alternative": "greater",
+            "p_value": 0.004995004995004995
+          }
+        }
+      },
+      "online": {
+        "aggregate": {
+          "auc": 0.6419906616210938,
+          "tpr_at_fpr_0.001": 0.0078125,
+          "tpr_at_fpr_0.01": 0.0078125,
+          "tpr_at_fpr_0.1": 0.203125,
+          "operating_point": {
+            "threshold": 623249254385447.0,
+            "detected_members": 2,
+            "false_positives": 0,
+            "n_members": 256,
+            "n_nonmembers": 256
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 256,
+            "members": 128,
+            "nonmembers": 128,
+            "auc": 0.612335205078125,
+            "tpr_at_fpr_0.001": 0.0,
+            "tpr_at_fpr_0.01": 0.0078125,
+            "tpr_at_fpr_0.1": 0.1484375,
+            "operating_point": {
+              "threshold": 1050846880682.1348,
+              "detected_members": 1,
+              "false_positives": 1,
+              "n_members": 128,
+              "n_nonmembers": 128
+            }
+          },
+          "male": {
+            "n": 256,
+            "members": 128,
+            "nonmembers": 128,
+            "auc": 0.670074462890625,
+            "tpr_at_fpr_0.001": 0.015625,
+            "tpr_at_fpr_0.01": 0.015625,
+            "tpr_at_fpr_0.1": 0.25,
+            "operating_point": {
+              "threshold": 623249254385447.0,
+              "detected_members": 2,
+              "false_positives": 0,
+              "n_members": 128,
+              "n_nonmembers": 128
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.0078125,
+        "absolute_subgroup_gap": 0.0078125,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.01022265625,
+            "ci95_low": 0.0,
+            "ci95_high": 0.02734375
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.007515625,
+            "ci95_low": 0.0,
+            "ci95_high": 0.046875
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.0223203125,
+            "ci95_low": 0.0,
+            "ci95_high": 0.0703125
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": 0.0148046875,
+            "ci95_low": -0.02363281249999999,
+            "ci95_high": 0.0625
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.0203046875,
+            "ci95_low": 0.0,
+            "ci95_high": 0.0703125
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.6419906616210938,
+            "null_mean": 0.4996016845703125,
+            "null_ci95_low": 0.4452718734741211,
+            "null_ci95_high": 0.5505922317504883,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.0078125,
+            "null_mean": 0.01186328125,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03515625,
+            "alternative": "greater",
+            "p_value": 0.7112887112887113
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.0078125,
+            "null_mean": 0.00096875,
+            "null_ci95_low": -0.0390625,
+            "null_ci95_high": 0.046875,
+            "alternative": "two-sided",
+            "p_value": 0.8111888111888111
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.0078125,
+            "null_mean": 0.0158125,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.0546875,
+            "alternative": "greater",
+            "p_value": 0.8111888111888111
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.0078125,
+            "null_mean": 0.015125,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.0546875,
+            "alternative": "greater",
+            "p_value": 0.7642357642357642
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.015625,
+            "null_mean": 0.01609375,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.0546875,
+            "alternative": "greater",
+            "p_value": 0.5254745254745254
+          }
+        }
+      },
+      "online_available": true,
+      "num_shadows": 32,
+      "shadow_train_size": 856,
+      "min_out_observations": 11,
+      "min_in_observations": 20
+    },
+    {
+      "control": "memorising_mlp",
+      "kind": "mlp",
+      "architecture": "Linear(input_dim, 128 -> 128 -> 64 -> 1) with ReLU between layers",
+      "positive_control": true,
+      "seed": 43,
+      "train_size": 856,
+      "val_size": 214,
+      "test_size": 268,
+      "cohort_counts": {
+        "female|member=0": 129,
+        "female|member=1": 129,
+        "male|member=0": 129,
+        "male|member=1": 129
+      },
+      "num_attack_examples": 516,
+      "memorisation": {
+        "train_auc": 0.999945410079483,
+        "test_auc": 0.923246731193751,
+        "train_loss": 0.010497741801348338,
+        "test_loss": 1.0719901676976633,
+        "train_accuracy": 0.9976635514018691,
+        "test_accuracy": 0.8768656716417911,
+        "auc_gap": 0.07669867888573201,
+        "loss_gap": 1.061492425896315,
+        "accuracy_gap": 0.12079787976007805
+      },
+      "memorisation_gate": 0.03,
+      "memorisation_gate_passed": true,
+      "attack_status": "completed",
+      "offline": {
+        "aggregate": {
+          "auc": 0.5793897602307554,
+          "tpr_at_fpr_0.001": 0.031007751937984496,
+          "tpr_at_fpr_0.01": 0.05813953488372093,
+          "tpr_at_fpr_0.1": 0.1511627906976744,
+          "operating_point": {
+            "threshold": 1.360033500592362,
+            "detected_members": 15,
+            "false_positives": 2,
+            "n_members": 258,
+            "n_nonmembers": 258
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.6024277387176251,
+            "tpr_at_fpr_0.001": 0.046511627906976744,
+            "tpr_at_fpr_0.01": 0.06201550387596899,
+            "tpr_at_fpr_0.1": 0.21705426356589147,
+            "operating_point": {
+              "threshold": 1.998998775504021,
+              "detected_members": 8,
+              "false_positives": 1,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          },
+          "male": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.5554353704705246,
+            "tpr_at_fpr_0.001": 0.05426356589147287,
+            "tpr_at_fpr_0.01": 0.06201550387596899,
+            "tpr_at_fpr_0.1": 0.12403100775193798,
+            "operating_point": {
+              "threshold": 1.0636165881857944,
+              "detected_members": 8,
+              "false_positives": 1,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.0,
+        "absolute_subgroup_gap": 0.0,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.05815503875968992,
+            "ci95_low": 0.023255813953488372,
+            "ci95_high": 0.09689922480620156
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.06637209302325582,
+            "ci95_low": 0.023255813953488372,
+            "ci95_high": 0.13178294573643412
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.061844961240310074,
+            "ci95_low": 0.023255813953488372,
+            "ci95_high": 0.10852713178294573
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": -0.004527131782945737,
+            "ci95_low": -0.07771317829457364,
+            "ci95_high": 0.06976744186046512
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.028589147286821708,
+            "ci95_low": 0.0,
+            "ci95_high": 0.08527131782945736
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.5793897602307554,
+            "null_mean": 0.5002941980650201,
+            "null_ci95_low": 0.45426450483744973,
+            "null_ci95_high": 0.5489849993990746,
+            "alternative": "greater",
+            "p_value": 0.001998001998001998
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.05813953488372093,
+            "null_mean": 0.012031007751937984,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03488372093023256,
+            "alternative": "greater",
+            "p_value": 0.001998001998001998
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": 0.0004961240310077519,
+            "null_ci95_low": -0.03875968992248062,
+            "null_ci95_high": 0.038953488372092844,
+            "alternative": "two-sided",
+            "p_value": 1.0
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": 0.015410852713178295,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.04670542635658897,
+            "alternative": "greater",
+            "p_value": 1.0
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.06201550387596899,
+            "null_mean": 0.015007751937984497,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05426356589147287,
+            "alternative": "greater",
+            "p_value": 0.014985014985014986
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.06201550387596899,
+            "null_mean": 0.01550387596899225,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05426356589147287,
+            "alternative": "greater",
+            "p_value": 0.023976023976023976
+          }
+        }
+      },
+      "online": {
+        "aggregate": {
+          "auc": 0.6254807403401238,
+          "tpr_at_fpr_0.001": 0.011627906976744186,
+          "tpr_at_fpr_0.01": 0.011627906976744186,
+          "tpr_at_fpr_0.1": 0.13178294573643412,
+          "operating_point": {
+            "threshold": 1.2887659707607315e+26,
+            "detected_members": 3,
+            "false_positives": 0,
+            "n_members": 258,
+            "n_nonmembers": 258
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.5975301965026141,
+            "tpr_at_fpr_0.001": 0.023255813953488372,
+            "tpr_at_fpr_0.01": 0.023255813953488372,
+            "tpr_at_fpr_0.1": 0.09302325581395349,
+            "operating_point": {
+              "threshold": 1.2887659707607315e+26,
+              "detected_members": 3,
+              "false_positives": 0,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          },
+          "male": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.6573523225767682,
+            "tpr_at_fpr_0.001": 0.0,
+            "tpr_at_fpr_0.01": 0.007751937984496124,
+            "tpr_at_fpr_0.1": 0.20155038759689922,
+            "operating_point": {
+              "threshold": 7107.291316805556,
+              "detected_members": 1,
+              "false_positives": 1,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          }
+        },
+        "signed_subgroup_difference": -0.015503875968992248,
+        "absolute_subgroup_gap": 0.015503875968992248,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.015968992248062017,
+            "ci95_low": 0.003875968992248062,
+            "ci95_high": 0.03488372093023256
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.02795348837209302,
+            "ci95_low": 0.007751937984496124,
+            "ci95_high": 0.06201550387596899
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.01951937984496124,
+            "ci95_low": 0.0,
+            "ci95_high": 0.09302325581395349
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": -0.008434108527131784,
+            "ci95_low": -0.05426356589147287,
+            "ci95_high": 0.06976744186046512
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.026093023255813953,
+            "ci95_low": 0.0,
+            "ci95_high": 0.07751937984496124
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.6254807403401238,
+            "null_mean": 0.49914640796827114,
+            "null_ci95_low": 0.4506512529295115,
+            "null_ci95_high": 0.5499536160687459,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.011627906976744186,
+            "null_mean": 0.011496124031007754,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03488372093023256,
+            "alternative": "greater",
+            "p_value": 0.4945054945054945
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": -0.015503875968992248,
+            "null_mean": -0.00034883720930232564,
+            "null_ci95_low": -0.03875968992248062,
+            "null_ci95_high": 0.03875968992248062,
+            "alternative": "two-sided",
+            "p_value": 0.5184815184815185
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.015503875968992248,
+            "null_mean": 0.015418604651162791,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.046511627906976744,
+            "alternative": "greater",
+            "p_value": 0.5184815184815185
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.023255813953488372,
+            "null_mean": 0.015279069767441863,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05426356589147287,
+            "alternative": "greater",
+            "p_value": 0.3246753246753247
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.007751937984496124,
+            "null_mean": 0.014930232558139534,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05426356589147287,
+            "alternative": "greater",
+            "p_value": 0.7412587412587412
+          }
+        }
+      },
+      "online_available": true,
+      "num_shadows": 32,
+      "shadow_train_size": 856,
+      "min_out_observations": 11,
+      "min_in_observations": 20
+    },
+    {
+      "control": "memorising_mlp",
+      "kind": "mlp",
+      "architecture": "Linear(input_dim, 128 -> 128 -> 64 -> 1) with ReLU between layers",
+      "positive_control": true,
+      "seed": 44,
+      "train_size": 856,
+      "val_size": 214,
+      "test_size": 268,
+      "cohort_counts": {
+        "female|member=0": 131,
+        "female|member=1": 131,
+        "male|member=0": 131,
+        "male|member=1": 131
+      },
+      "num_attack_examples": 524,
+      "memorisation": {
+        "train_auc": 0.9998744431828107,
+        "test_auc": 0.9386718749999999,
+        "train_loss": 0.026749181721227356,
+        "test_loss": 0.7887138779179482,
+        "train_accuracy": 0.9871495327102804,
+        "test_accuracy": 0.9067164179104478,
+        "auc_gap": 0.06120256818281078,
+        "loss_gap": 0.7619646961967209,
+        "accuracy_gap": 0.08043311479983262
+      },
+      "memorisation_gate": 0.03,
+      "memorisation_gate_passed": true,
+      "attack_status": "completed",
+      "offline": {
+        "aggregate": {
+          "auc": 0.5582498106170969,
+          "tpr_at_fpr_0.001": 0.03435114503816794,
+          "tpr_at_fpr_0.01": 0.07251908396946564,
+          "tpr_at_fpr_0.1": 0.1450381679389313,
+          "operating_point": {
+            "threshold": 0.9976646081351133,
+            "detected_members": 19,
+            "false_positives": 2,
+            "n_members": 262,
+            "n_nonmembers": 262
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.552357088747742,
+            "tpr_at_fpr_0.001": 0.022900763358778626,
+            "tpr_at_fpr_0.01": 0.07633587786259542,
+            "tpr_at_fpr_0.1": 0.1450381679389313,
+            "operating_point": {
+              "threshold": 0.9976646081351133,
+              "detected_members": 10,
+              "false_positives": 1,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          },
+          "male": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.5643319153895461,
+            "tpr_at_fpr_0.001": 0.04580152671755725,
+            "tpr_at_fpr_0.01": 0.06870229007633588,
+            "tpr_at_fpr_0.1": 0.1450381679389313,
+            "operating_point": {
+              "threshold": 1.1676337519714794,
+              "detected_members": 9,
+              "false_positives": 1,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          }
+        },
+        "signed_subgroup_difference": -0.007633587786259541,
+        "absolute_subgroup_gap": 0.007633587786259541,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.06137022900763359,
+            "ci95_low": 0.019083969465648856,
+            "ci95_high": 0.10687022900763359
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.06625190839694656,
+            "ci95_low": 0.007633587786259542,
+            "ci95_high": 0.1297709923664122
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.06218320610687023,
+            "ci95_low": 0.022900763358778626,
+            "ci95_high": 0.10687022900763359
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": -0.004068702290076336,
+            "ci95_low": -0.08396946564885496,
+            "ci95_high": 0.07633587786259542
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.03319847328244275,
+            "ci95_low": 0.0,
+            "ci95_high": 0.0916030534351145
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.5582498106170969,
+            "null_mean": 0.49977653545830664,
+            "null_ci95_low": 0.4532648519899773,
+            "null_ci95_high": 0.5509230595536391,
+            "alternative": "greater",
+            "p_value": 0.012987012987012988
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.07251908396946564,
+            "null_mean": 0.011767175572519085,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03435114503816794,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": -0.007633587786259541,
+            "null_mean": 4.580152671755749e-05,
+            "null_ci95_low": -0.03816793893129771,
+            "null_ci95_high": 0.04580152671755725,
+            "alternative": "two-sided",
+            "p_value": 0.8271728271728271
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.007633587786259541,
+            "null_mean": 0.016106870229007638,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.045992366412213576,
+            "alternative": "greater",
+            "p_value": 0.8271728271728271
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.07633587786259542,
+            "null_mean": 0.015625954198473284,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05343511450381679,
+            "alternative": "greater",
+            "p_value": 0.003996003996003996
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.06870229007633588,
+            "null_mean": 0.01567175572519084,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05343511450381679,
+            "alternative": "greater",
+            "p_value": 0.01098901098901099
+          }
+        }
+      },
+      "online": {
+        "aggregate": {
+          "auc": 0.560209195268341,
+          "tpr_at_fpr_0.001": 0.003816793893129771,
+          "tpr_at_fpr_0.01": 0.007633587786259542,
+          "tpr_at_fpr_0.1": 0.1183206106870229,
+          "operating_point": {
+            "threshold": 86035765335.02559,
+            "detected_members": 2,
+            "false_positives": 2,
+            "n_members": 262,
+            "n_nonmembers": 262
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.5899714468853796,
+            "tpr_at_fpr_0.001": 0.007633587786259542,
+            "tpr_at_fpr_0.01": 0.007633587786259542,
+            "tpr_at_fpr_0.1": 0.1984732824427481,
+            "operating_point": {
+              "threshold": 43756408994088.81,
+              "detected_members": 1,
+              "false_positives": 0,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          },
+          "male": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.5328360818134141,
+            "tpr_at_fpr_0.001": 0.007633587786259542,
+            "tpr_at_fpr_0.01": 0.015267175572519083,
+            "tpr_at_fpr_0.1": 0.06870229007633588,
+            "operating_point": {
+              "threshold": 69304.04344449026,
+              "detected_members": 2,
+              "false_positives": 1,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.007633587786259542,
+        "absolute_subgroup_gap": 0.007633587786259542,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.013282442748091604,
+            "ci95_low": 0.0,
+            "ci95_high": 0.04580152671755725
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.025320610687022908,
+            "ci95_low": 0.0,
+            "ci95_high": 0.09942748091603036
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.020977099236641223,
+            "ci95_low": 0.0,
+            "ci95_high": 0.061068702290076333
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": -0.004343511450381679,
+            "ci95_low": -0.08396946564885496,
+            "ci95_high": 0.05343511450381679
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.02506106870229008,
+            "ci95_low": 0.0,
+            "ci95_high": 0.08396946564885496
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.560209195268341,
+            "null_mean": 0.4996074966493794,
+            "null_ci95_low": 0.4509368990734806,
+            "null_ci95_high": 0.5489434619194685,
+            "alternative": "greater",
+            "p_value": 0.007992007992007992
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.007633587786259542,
+            "null_mean": 0.010900763358778627,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03435114503816794,
+            "alternative": "greater",
+            "p_value": 0.6633366633366633
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.007633587786259542,
+            "null_mean": -0.00025954198473282454,
+            "null_ci95_low": -0.04580152671755725,
+            "null_ci95_high": 0.04580152671755725,
+            "alternative": "two-sided",
+            "p_value": 0.8021978021978022
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.007633587786259542,
+            "null_mean": 0.016564885496183207,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.061068702290076333,
+            "alternative": "greater",
+            "p_value": 0.8021978021978022
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.007633587786259542,
+            "null_mean": 0.015320610687022902,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.061068702290076333,
+            "alternative": "greater",
+            "p_value": 0.7522477522477522
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.015267175572519083,
+            "null_mean": 0.015061068702290079,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05343511450381679,
+            "alternative": "greater",
+            "p_value": 0.4805194805194805
+          }
+        }
+      },
+      "online_available": true,
+      "num_shadows": 32,
+      "shadow_train_size": 856,
+      "min_out_observations": 11,
+      "min_in_observations": 20
+    },
+    {
+      "control": "unbounded_decision_tree",
+      "kind": "tree",
+      "architecture": "DecisionTreeClassifier(max_depth=None, min_samples_leaf=1, min_samples_split=2)",
+      "positive_control": true,
+      "seed": 42,
+      "train_size": 856,
+      "val_size": 214,
+      "test_size": 268,
+      "cohort_counts": {
+        "female|member=0": 128,
+        "female|member=1": 128,
+        "male|member=0": 128,
+        "male|member=1": 128
+      },
+      "num_attack_examples": 512,
+      "memorisation": {
+        "train_auc": 0.9999972705039741,
+        "test_auc": 0.8800675675675675,
+        "train_loss": 0.001619602524677705,
+        "test_loss": 1.924548822535879,
+        "train_accuracy": 0.9988317757009346,
+        "test_accuracy": 0.8805970149253731,
+        "auc_gap": 0.11992970293640659,
+        "loss_gap": 1.9229292200112011,
+        "accuracy_gap": 0.1182347607755615
+      },
+      "memorisation_gate": 0.03,
+      "memorisation_gate_passed": true,
+      "attack_status": "completed",
+      "offline": {
+        "aggregate": {
+          "auc": 0.5985260009765625,
+          "tpr_at_fpr_0.001": 0.01953125,
+          "tpr_at_fpr_0.01": 0.0390625,
+          "tpr_at_fpr_0.1": 0.1953125,
+          "operating_point": {
+            "threshold": 2.022599587389726,
+            "detected_members": 10,
+            "false_positives": 2,
+            "n_members": 256,
+            "n_nonmembers": 256
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 256,
+            "members": 128,
+            "nonmembers": 128,
+            "auc": 0.58709716796875,
+            "tpr_at_fpr_0.001": 0.0078125,
+            "tpr_at_fpr_0.01": 0.0078125,
+            "tpr_at_fpr_0.1": 0.140625,
+            "operating_point": {
+              "threshold": 16118095550958.312,
+              "detected_members": 1,
+              "false_positives": 0,
+              "n_members": 128,
+              "n_nonmembers": 128
+            }
+          },
+          "male": {
+            "n": 256,
+            "members": 128,
+            "nonmembers": 128,
+            "auc": 0.61328125,
+            "tpr_at_fpr_0.001": 0.1171875,
+            "tpr_at_fpr_0.01": 0.1171875,
+            "tpr_at_fpr_0.1": 0.2421875,
+            "operating_point": {
+              "threshold": 1.0444659357341872,
+              "detected_members": 15,
+              "false_positives": 0,
+              "n_members": 128,
+              "n_nonmembers": 128
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.109375,
+        "absolute_subgroup_gap": 0.109375,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.04869921875,
+            "ci95_low": 0.01171875,
+            "ci95_high": 0.1015625
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.015671875,
+            "ci95_low": 0.0,
+            "ci95_high": 0.1171875
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.1213828125,
+            "ci95_low": 0.0703125,
+            "ci95_high": 0.1875
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": 0.1057109375,
+            "ci95_low": -0.0078125,
+            "ci95_high": 0.1796875
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.1075859375,
+            "ci95_low": 0.0234375,
+            "ci95_high": 0.1796875
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.5985260009765625,
+            "null_mean": 0.5009789733886719,
+            "null_ci95_low": 0.46162662506103513,
+            "null_ci95_high": 0.5382635116577148,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.0390625,
+            "null_mean": 0.008765625,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03515625,
+            "alternative": "greater",
+            "p_value": 0.02197802197802198
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.109375,
+            "null_mean": -0.00225,
+            "null_ci95_low": -0.0390625,
+            "null_ci95_high": 0.046875,
+            "alternative": "two-sided",
+            "p_value": 0.000999000999000999
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.109375,
+            "null_mean": 0.014234375,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.046875,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.0078125,
+            "null_mean": 0.0137734375,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.0390625,
+            "alternative": "greater",
+            "p_value": 0.7672327672327672
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.1171875,
+            "null_mean": 0.0115234375,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.0546875,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          }
+        }
+      },
+      "online": {
+        "aggregate": {
+          "auc": 0.5904922485351562,
+          "tpr_at_fpr_0.001": 0.01953125,
+          "tpr_at_fpr_0.01": 0.0390625,
+          "tpr_at_fpr_0.1": 0.1953125,
+          "operating_point": {
+            "threshold": 31.551363945566685,
+            "detected_members": 10,
+            "false_positives": 2,
+            "n_members": 256,
+            "n_nonmembers": 256
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 256,
+            "members": 128,
+            "nonmembers": 128,
+            "auc": 0.575897216796875,
+            "tpr_at_fpr_0.001": 0.0078125,
+            "tpr_at_fpr_0.01": 0.0078125,
+            "tpr_at_fpr_0.1": 0.140625,
+            "operating_point": {
+              "threshold": 1.2989650209491107e+26,
+              "detected_members": 1,
+              "false_positives": 0,
+              "n_members": 128,
+              "n_nonmembers": 128
+            }
+          },
+          "male": {
+            "n": 256,
+            "members": 128,
+            "nonmembers": 128,
+            "auc": 0.607818603515625,
+            "tpr_at_fpr_0.001": 0.109375,
+            "tpr_at_fpr_0.01": 0.109375,
+            "tpr_at_fpr_0.1": 0.203125,
+            "operating_point": {
+              "threshold": 30.52228032167355,
+              "detected_members": 14,
+              "false_positives": 0,
+              "n_members": 128,
+              "n_nonmembers": 128
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.1015625,
+        "absolute_subgroup_gap": 0.1015625,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.04662109375,
+            "ci95_low": 0.01171875,
+            "ci95_high": 0.09375
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.014,
+            "ci95_low": 0.0,
+            "ci95_high": 0.09375
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.1151015625,
+            "ci95_low": 0.0625,
+            "ci95_high": 0.1875
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": 0.1011015625,
+            "ci95_low": 0.0234375,
+            "ci95_high": 0.17207031249999982
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.1021796875,
+            "ci95_low": 0.03125,
+            "ci95_high": 0.17207031249999982
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.5904922485351562,
+            "null_mean": 0.5005792160034179,
+            "null_ci95_low": 0.4617645263671875,
+            "null_ci95_high": 0.5401266098022461,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.0390625,
+            "null_mean": 0.00875390625,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03515625,
+            "alternative": "greater",
+            "p_value": 0.01898101898101898
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.1015625,
+            "null_mean": -0.0031953125,
+            "null_ci95_low": -0.0390625,
+            "null_ci95_high": 0.0390625,
+            "alternative": "two-sided",
+            "p_value": 0.000999000999000999
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.1015625,
+            "null_mean": 0.0156328125,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.046875,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.0078125,
+            "null_mean": 0.0148046875,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03925781249999982,
+            "alternative": "greater",
+            "p_value": 0.7652347652347652
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.109375,
+            "null_mean": 0.011609375,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.0546875,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          }
+        }
+      },
+      "online_available": true,
+      "num_shadows": 32,
+      "shadow_train_size": 856,
+      "min_out_observations": 11,
+      "min_in_observations": 20
+    },
+    {
+      "control": "unbounded_decision_tree",
+      "kind": "tree",
+      "architecture": "DecisionTreeClassifier(max_depth=None, min_samples_leaf=1, min_samples_split=2)",
+      "positive_control": true,
+      "seed": 43,
+      "train_size": 856,
+      "val_size": 214,
+      "test_size": 268,
+      "cohort_counts": {
+        "female|member=0": 129,
+        "female|member=1": 129,
+        "male|member=0": 129,
+        "male|member=1": 129
+      },
+      "num_attack_examples": 516,
+      "memorisation": {
+        "train_auc": 0.9999890820158966,
+        "test_auc": 0.8752476368370409,
+        "train_loss": 0.0032391050493504625,
+        "test_loss": 2.0474194873860463,
+        "train_accuracy": 0.9976635514018691,
+        "test_accuracy": 0.8694029850746269,
+        "auc_gap": 0.12474144517885577,
+        "loss_gap": 2.044180382336696,
+        "accuracy_gap": 0.12826056632724225
+      },
+      "memorisation_gate": 0.03,
+      "memorisation_gate_passed": true,
+      "attack_status": "completed",
+      "offline": {
+        "aggregate": {
+          "auc": 0.6169926687098132,
+          "tpr_at_fpr_0.001": 0.01937984496124031,
+          "tpr_at_fpr_0.01": 0.07751937984496124,
+          "tpr_at_fpr_0.1": 0.20155038759689922,
+          "operating_point": {
+            "threshold": 1.2613124477737827,
+            "detected_members": 20,
+            "false_positives": 2,
+            "n_members": 258,
+            "n_nonmembers": 258
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.6169400877351121,
+            "tpr_at_fpr_0.001": 0.015503875968992248,
+            "tpr_at_fpr_0.01": 0.031007751937984496,
+            "tpr_at_fpr_0.1": 0.20155038759689922,
+            "operating_point": {
+              "threshold": 3.0151134457776356,
+              "detected_members": 4,
+              "false_positives": 1,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          },
+          "male": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.6175109668890092,
+            "tpr_at_fpr_0.001": 0.06976744186046512,
+            "tpr_at_fpr_0.01": 0.06976744186046512,
+            "tpr_at_fpr_0.1": 0.17054263565891473,
+            "operating_point": {
+              "threshold": 1.2613124477737827,
+              "detected_members": 9,
+              "false_positives": 0,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.03875968992248062,
+        "absolute_subgroup_gap": 0.03875968992248062,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.06886821705426356,
+            "ci95_low": 0.015503875968992248,
+            "ci95_high": 0.12790697674418605
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.0650077519379845,
+            "ci95_low": 0.0,
+            "ci95_high": 0.17829457364341086
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.07486821705426357,
+            "ci95_low": 0.031007751937984496,
+            "ci95_high": 0.13178294573643412
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": 0.009860465116279067,
+            "ci95_low": -0.10852713178294575,
+            "ci95_high": 0.10852713178294573
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.05325581395348838,
+            "ci95_low": 0.0,
+            "ci95_high": 0.12403100775193798
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.6169926687098132,
+            "null_mean": 0.5006925064599482,
+            "null_ci95_low": 0.4582046977345111,
+            "null_ci95_high": 0.5423962276906437,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.07751937984496124,
+            "null_mean": 0.010337209302325583,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03488372093023256,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.03875968992248062,
+            "null_mean": -0.0017596899224806201,
+            "null_ci95_low": -0.03875968992248062,
+            "null_ci95_high": 0.03875968992248062,
+            "alternative": "two-sided",
+            "p_value": 0.07292707292707293
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.03875968992248062,
+            "null_mean": 0.015279069767441861,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05426356589147287,
+            "alternative": "greater",
+            "p_value": 0.07292707292707293
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.031007751937984496,
+            "null_mean": 0.014007751937984498,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03875968992248062,
+            "alternative": "greater",
+            "p_value": 0.2177822177822178
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.06976744186046512,
+            "null_mean": 0.012248062015503876,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.04670542635658897,
+            "alternative": "greater",
+            "p_value": 0.005994005994005994
+          }
+        }
+      },
+      "online": {
+        "aggregate": {
+          "auc": 0.6204404783366384,
+          "tpr_at_fpr_0.001": 0.01937984496124031,
+          "tpr_at_fpr_0.01": 0.07364341085271318,
+          "tpr_at_fpr_0.1": 0.16666666666666666,
+          "operating_point": {
+            "threshold": 30.522280321706205,
+            "detected_members": 19,
+            "false_positives": 2,
+            "n_members": 258,
+            "n_nonmembers": 258
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.6223484165615047,
+            "tpr_at_fpr_0.001": 0.015503875968992248,
+            "tpr_at_fpr_0.01": 0.031007751937984496,
+            "tpr_at_fpr_0.1": 0.20155038759689922,
+            "operating_point": {
+              "threshold": 33.757470613082965,
+              "detected_members": 4,
+              "false_positives": 1,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          },
+          "male": {
+            "n": 258,
+            "members": 129,
+            "nonmembers": 129,
+            "auc": 0.6188029565530918,
+            "tpr_at_fpr_0.001": 0.06976744186046512,
+            "tpr_at_fpr_0.01": 0.06976744186046512,
+            "tpr_at_fpr_0.1": 0.13178294573643412,
+            "operating_point": {
+              "threshold": 30.522280321706205,
+              "detected_members": 9,
+              "false_positives": 0,
+              "n_members": 129,
+              "n_nonmembers": 129
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.03875968992248062,
+        "absolute_subgroup_gap": 0.03875968992248062,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.0683798449612403,
+            "ci95_low": 0.015503875968992248,
+            "ci95_high": 0.12403100775193798
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.06517829457364341,
+            "ci95_low": 0.0,
+            "ci95_high": 0.17829457364341086
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.07375193798449613,
+            "ci95_low": 0.031007751937984496,
+            "ci95_high": 0.12403100775193798
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": 0.008573643410852712,
+            "ci95_low": -0.10852713178294575,
+            "ci95_high": 0.10077519379844961
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.050387596899224806,
+            "ci95_low": 0.0,
+            "ci95_high": 0.11627906976744186
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.6204404783366384,
+            "null_mean": 0.49965436271858665,
+            "null_ci95_low": 0.4574080959677904,
+            "null_ci95_high": 0.5402916741782344,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.07364341085271318,
+            "null_mean": 0.009546511627906977,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03488372093023256,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.03875968992248062,
+            "null_mean": -0.0006434108527131784,
+            "null_ci95_low": -0.03875968992248062,
+            "null_ci95_high": 0.046511627906976744,
+            "alternative": "two-sided",
+            "p_value": 0.07592407592407592
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.03875968992248062,
+            "null_mean": 0.015744186046511628,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05426356589147287,
+            "alternative": "greater",
+            "p_value": 0.07592407592407592
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.031007751937984496,
+            "null_mean": 0.013565891472868219,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03875968992248062,
+            "alternative": "greater",
+            "p_value": 0.18081918081918083
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.06976744186046512,
+            "null_mean": 0.012922480620155039,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05426356589147287,
+            "alternative": "greater",
+            "p_value": 0.008991008991008992
+          }
+        }
+      },
+      "online_available": true,
+      "num_shadows": 32,
+      "shadow_train_size": 856,
+      "min_out_observations": 11,
+      "min_in_observations": 20
+    },
+    {
+      "control": "unbounded_decision_tree",
+      "kind": "tree",
+      "architecture": "DecisionTreeClassifier(max_depth=None, min_samples_leaf=1, min_samples_split=2)",
+      "positive_control": true,
+      "seed": 44,
+      "train_size": 856,
+      "val_size": 214,
+      "test_size": 268,
+      "cohort_counts": {
+        "female|member=0": 131,
+        "female|member=1": 131,
+        "male|member=0": 131,
+        "male|member=1": 131
+      },
+      "num_attack_examples": 524,
+      "memorisation": {
+        "train_auc": 0.9999890820158966,
+        "test_auc": 0.8946428571428571,
+        "train_loss": 0.0032391050493504625,
+        "test_loss": 1.6839802322132482,
+        "train_accuracy": 0.9976635514018691,
+        "test_accuracy": 0.8955223880597015,
+        "auc_gap": 0.10534622487303957,
+        "loss_gap": 1.6807411271638977,
+        "accuracy_gap": 0.1021411633421676
+      },
+      "memorisation_gate": 0.03,
+      "memorisation_gate_passed": true,
+      "attack_status": "completed",
+      "offline": {
+        "aggregate": {
+          "auc": 0.5821630441116485,
+          "tpr_at_fpr_0.001": 0.03816793893129771,
+          "tpr_at_fpr_0.01": 0.04198473282442748,
+          "tpr_at_fpr_0.1": 0.14885496183206107,
+          "operating_point": {
+            "threshold": 2.022599587389726,
+            "detected_members": 11,
+            "false_positives": 1,
+            "n_members": 262,
+            "n_nonmembers": 262
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.5709457490822213,
+            "tpr_at_fpr_0.001": 0.03816793893129771,
+            "tpr_at_fpr_0.01": 0.04580152671755725,
+            "tpr_at_fpr_0.1": 0.16030534351145037,
+            "operating_point": {
+              "threshold": 2.022599587389726,
+              "detected_members": 6,
+              "false_positives": 1,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          },
+          "male": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.5932637958160947,
+            "tpr_at_fpr_0.001": 0.04580152671755725,
+            "tpr_at_fpr_0.01": 0.04580152671755725,
+            "tpr_at_fpr_0.1": 0.16030534351145037,
+            "operating_point": {
+              "threshold": 1.556997888323046,
+              "detected_members": 6,
+              "false_positives": 0,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.0,
+        "absolute_subgroup_gap": 0.0,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.0448587786259542,
+            "ci95_low": 0.019083969465648856,
+            "ci95_high": 0.07251908396946564
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.04846564885496183,
+            "ci95_low": 0.007633587786259542,
+            "ci95_high": 0.11450381679389313
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.047725190839694655,
+            "ci95_low": 0.015267175572519083,
+            "ci95_high": 0.0916030534351145
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": -0.0007404580152671756,
+            "ci95_low": -0.06870229007633588,
+            "ci95_high": 0.061068702290076333
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.02454198473282443,
+            "ci95_low": 0.0,
+            "ci95_high": 0.0688931297709922
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.5821630441116485,
+            "null_mean": 0.5008809218577006,
+            "null_ci95_low": 0.46190453644892493,
+            "null_ci95_high": 0.5401428019928908,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.04198473282442748,
+            "null_mean": 0.004862595419847328,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.03435114503816794,
+            "alternative": "greater",
+            "p_value": 0.006993006993006993
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": -4.580152671755711e-05,
+            "null_ci95_low": -0.04580152671755725,
+            "null_ci95_high": 0.04580152671755725,
+            "alternative": "two-sided",
+            "p_value": 1.0
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": 0.016717557251908394,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05343511450381679,
+            "alternative": "greater",
+            "p_value": 1.0
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.04580152671755725,
+            "null_mean": 0.01098473282442748,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.04580152671755725,
+            "alternative": "greater",
+            "p_value": 0.060939060939060936
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.04580152671755725,
+            "null_mean": 0.010938931297709925,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.04580152671755725,
+            "alternative": "greater",
+            "p_value": 0.07492507492507493
+          }
+        }
+      },
+      "online": {
+        "aggregate": {
+          "auc": 0.5737355049239554,
+          "tpr_at_fpr_0.001": 0.03816793893129771,
+          "tpr_at_fpr_0.01": 0.04198473282442748,
+          "tpr_at_fpr_0.1": 0.14885496183206107,
+          "operating_point": {
+            "threshold": 31.55136394553403,
+            "detected_members": 11,
+            "false_positives": 1,
+            "n_members": 262,
+            "n_nonmembers": 262
+          }
+        },
+        "subgroups": {
+          "female": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.5592622807528699,
+            "tpr_at_fpr_0.001": 0.03816793893129771,
+            "tpr_at_fpr_0.01": 0.04580152671755725,
+            "tpr_at_fpr_0.1": 0.13740458015267176,
+            "operating_point": {
+              "threshold": 31.55136394553403,
+              "detected_members": 6,
+              "false_positives": 1,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          },
+          "male": {
+            "n": 262,
+            "members": 131,
+            "nonmembers": 131,
+            "auc": 0.5878445312044752,
+            "tpr_at_fpr_0.001": 0.04580152671755725,
+            "tpr_at_fpr_0.01": 0.04580152671755725,
+            "tpr_at_fpr_0.1": 0.13740458015267176,
+            "operating_point": {
+              "threshold": 30.861871648459243,
+              "detected_members": 6,
+              "false_positives": 0,
+              "n_members": 131,
+              "n_nonmembers": 131
+            }
+          }
+        },
+        "signed_subgroup_difference": 0.0,
+        "absolute_subgroup_gap": 0.0,
+        "bootstrap": {
+          "aggregate": {
+            "reps": 1000,
+            "mean": 0.0456793893129771,
+            "ci95_low": 0.022900763358778626,
+            "ci95_high": 0.08015267175572519
+          },
+          "female": {
+            "reps": 1000,
+            "mean": 0.04821374045801527,
+            "ci95_low": 0.015267175572519083,
+            "ci95_high": 0.10687022900763359
+          },
+          "male": {
+            "reps": 1000,
+            "mean": 0.04885496183206107,
+            "ci95_low": 0.015267175572519083,
+            "ci95_high": 0.0916030534351145
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "mean": 0.000641221374045802,
+            "ci95_low": -0.06870229007633588,
+            "ci95_high": 0.06106870229007634
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "mean": 0.02345038167938931,
+            "ci95_low": 0.0,
+            "ci95_high": 0.07633587786259541
+          }
+        },
+        "permutation": {
+          "aggregate_auc": {
+            "reps": 1000,
+            "observed": 0.5737355049239554,
+            "null_mean": 0.4996655060893887,
+            "null_ci95_low": 0.4594984630849019,
+            "null_ci95_high": 0.5411838616630732,
+            "alternative": "greater",
+            "p_value": 0.000999000999000999
+          },
+          "aggregate_tpr": {
+            "reps": 1000,
+            "observed": 0.04198473282442748,
+            "null_mean": 0.004297709923664122,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.030534351145038167,
+            "alternative": "greater",
+            "p_value": 0.00999000999000999
+          },
+          "signed_difference": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": 0.00012213740458015288,
+            "null_ci95_low": -0.04580152671755725,
+            "null_ci95_high": 0.04580152671755725,
+            "alternative": "two-sided",
+            "p_value": 1.0
+          },
+          "absolute_gap": {
+            "reps": 1000,
+            "observed": 0.0,
+            "null_mean": 0.014427480916030536,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05343511450381679,
+            "alternative": "greater",
+            "p_value": 1.0
+          },
+          "female": {
+            "reps": 1000,
+            "observed": 0.04580152671755725,
+            "null_mean": 0.01,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.04580152671755725,
+            "alternative": "greater",
+            "p_value": 0.060939060939060936
+          },
+          "male": {
+            "reps": 1000,
+            "observed": 0.04580152671755725,
+            "null_mean": 0.010122137404580152,
+            "null_ci95_low": 0.0,
+            "null_ci95_high": 0.05343511450381679,
+            "alternative": "greater",
+            "p_value": 0.03996003996003996
+          }
+        }
+      },
+      "online_available": true,
+      "num_shadows": 32,
+      "shadow_train_size": 856,
+      "min_out_observations": 11,
+      "min_in_observations": 20
+    }
+  ],
+  "decisions": [
+    {
+      "control": "matched_capacity_mlp",
+      "positive_control": false,
+      "seeds_attacked": 2,
+      "mean_auc_gap": 0.03666133178743247,
+      "mean_lira_auc": 0.518285212210313,
+      "mean_permutation_p_auc": 0.25074925074925075,
+      "verdict": "ATTACK INCONCLUSIVE",
+      "basis": "Mean aggregate LiRA AUC 0.5183 with the permutation null rejected on only 0/2 seeds.",
+      "subgroup_verdict": "SUBGROUP DISPARITY UNSUPPORTED",
+      "subgroup_basis": "The permutation null is rejected on only 0/2 seeds; at least one gap is within the 0.0078 discrete operating-point resolution."
+    },
+    {
+      "control": "memorising_mlp",
+      "positive_control": true,
+      "seeds_attacked": 3,
+      "mean_auc_gap": 0.06568754770099128,
+      "mean_lira_auc": 0.5745002589675132,
+      "mean_permutation_p_auc": 0.005328005328005328,
+      "verdict": "ATTACK DETECTS LEAKAGE",
+      "basis": "Mean aggregate offline-LiRA AUC 0.5745, above chance on every seed; the stratified membership permutation null is rejected at p<0.05 on 3/3 seeds (3/3 bootstrap TPR@1% intervals also clear the 1% random baseline).",
+      "subgroup_verdict": "SUBGROUP DISPARITY UNSUPPORTED",
+      "subgroup_basis": "The signed direction is not stable across seeds; the permutation null is rejected on only 1/3 seeds; at least one gap is within the 0.0078 discrete operating-point resolution."
+    },
+    {
+      "control": "unbounded_decision_tree",
+      "positive_control": true,
+      "seeds_attacked": 3,
+      "mean_auc_gap": 0.1166724576627673,
+      "mean_lira_auc": 0.5992272379326747,
+      "mean_permutation_p_auc": 0.000999000999000999,
+      "verdict": "ATTACK DETECTS LEAKAGE",
+      "basis": "Mean aggregate offline-LiRA AUC 0.5992, above chance on every seed; the stratified membership permutation null is rejected at p<0.05 on 3/3 seeds (3/3 bootstrap TPR@1% intervals also clear the 1% random baseline).",
+      "subgroup_verdict": "SUBGROUP DISPARITY UNSUPPORTED",
+      "subgroup_basis": "The permutation null is rejected on only 1/3 seeds; at least one gap is within the 0.0078 discrete operating-point resolution."
+    }
+  ]
+}
