@@ -25,7 +25,9 @@ on:
     paths:
       - research/detectability_noise_ladder.py
       - research/canary_pilot.py
+      - research/recipe_contrast.py
       - tests/test_detectability_noise_ladder.py
+      - tests/test_recipe_contrast.py
       - docs/THREAT_MODEL.md
       - docs/NOISE_LADDER_PREREGISTRATION.md
       - .github/workflows/detectability-noise-ladder.yml
@@ -54,7 +56,7 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[experimental,dev]"
       - name: Ruff lint
-        run: ruff check src tests research/detectability_noise_ladder.py research/canary_pilot.py
+        run: ruff check src tests research/detectability_noise_ladder.py research/canary_pilot.py research/recipe_contrast.py
       - name: Unit tests
         run: python -m pytest tests/ -q -m "not slow"
       - name: Reduced smoke run (two points, one seed, tiny budgets)
@@ -72,6 +74,9 @@ jobs:
             --input-dir /tmp/smoke/points --output-dir /tmp/smoke/out
           test -f /tmp/smoke/out/noise_ladder.md
           test -f /tmp/smoke/out/lira_auc_vs_bce_gap.png
+          # Per-example records are what a later paired between-recipe test
+          # needs; losing them silently would be unrecoverable after the fact.
+          test -f /tmp/smoke/out/per_example.csv
           ! grep -q skipped_memorisation_gate /tmp/smoke/out/noise_ladder.md
       - name: Upload smoke output
         if: always()
