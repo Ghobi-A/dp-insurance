@@ -294,6 +294,8 @@ def _seed_result(
         "test_size": 268,
         "cohort_counts": {"female|member=1": members, "male|member=1": members},
         "num_attack_examples": 4 * members,
+        "cohort_index_digest": 111_000 + seed,
+        "shadow_schedule_digest": 222_000 + seed,
         "memorisation": {
             "train_auc": 0.99, "test_auc": 0.90,
             "train_loss": 0.05, "test_loss": 0.5,
@@ -642,6 +644,95 @@ def test_holm_is_applied_across_points_within_each_seed():
     assert points[0]["seed_results"][0]["offline"]["permutation"]["aggregate_auc"][
         "p_value_holm"
     ] == pytest.approx(0.003)
+
+
+def test_pairing_verification_accepts_a_properly_paired_ladder():
+    points = [_point(ladder.point_label(e), e) for e in ladder.LADDER_EPSILONS]
+    pairing = ladder.verify_pairing(points)
+    assert sorted(pairing) == ["42", "43", "44"]
+    assert pairing["42"]["cohort_index_digest"] == 111_042
+    assert pairing["43"]["shadow_schedule_digest"] == 222_043
+
+
+@pytest.mark.parametrize(
+    "field", ["cohort_index_digest", "shadow_schedule_digest", "num_attack_examples", "train_size"]
+)
+def test_pairing_verification_rejects_a_point_that_drifted(field):
+    points = [_point(ladder.point_label(e), e) for e in ladder.LADDER_EPSILONS]
+    points[3]["seed_results"][1][field] = 999_999
+    with pytest.raises(ValueError) as excinfo:
+        ladder.verify_pairing(points)
+    message = str(excinfo.value)
+    assert field in message
+    assert "seed 43" in message
+    assert "eps8" in message
+
+
+def test_pairing_verification_rejects_artifacts_without_digests():
+    points = [_point(ladder.point_label(e), e) for e in ladder.LADDER_EPSILONS[:2]]
+    del points[1]["seed_results"][0]["cohort_index_digest"]
+    with pytest.raises(ValueError, match="cohort_index_digest"):
+        ladder.verify_pairing(points)
+
+
+def test_aggregation_fails_loudly_when_points_are_not_paired(tmp_path):
+    points_dir = tmp_path / "points"
+    points_dir.mkdir()
+    for epsilon in ladder.LADDER_EPSILONS:
+        point = _point(ladder.point_label(epsilon), epsilon)
+        if epsilon == 4.0:
+            point["seed_results"][0]["cohort_index_digest"] = 7
+        (points_dir / f"{point['label']}.json").write_text(json.dumps(point, default=float))
+
+    args = ladder.argparse.Namespace(
+        input_dir=str(points_dir), output_dir=str(tmp_path / "out"), expect_all=True
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        ladder.run_aggregate(args)
+    assert "not paired" in str(excinfo.value)
+
+
+def test_aggregation_writes_per_example_records(tmp_path):
+    points_dir = tmp_path / "points"
+    points_dir.mkdir()
+    for epsilon in ladder.LADDER_EPSILONS:
+        point = _point(ladder.point_label(epsilon), epsilon)
+        for result in point["seed_results"]:
+            result["per_example"] = [
+                {
+                    "label": result["label"],
+                    "requested_epsilon": epsilon,
+                    "seed": result["seed"],
+                    "cohort_position": position,
+                    "example_index": 1000 + position,
+                    "group": "male" if position % 2 else "female",
+                    "membership": position % 2,
+                    "target_loss": 0.5,
+                    "offline_score": 0.1 * position,
+                    "out_observations": 11,
+                    "in_observations": 20,
+                }
+                for position in range(8)
+            ]
+        (points_dir / f"{point['label']}.json").write_text(json.dumps(point, default=float))
+
+    out = tmp_path / "out"
+    ladder.run_aggregate(
+        ladder.argparse.Namespace(
+            input_dir=str(points_dir), output_dir=str(out), expect_all=True
+        )
+    )
+    frame = ladder.pd.read_csv(out / "per_example.csv")
+    assert len(frame) == 6 * 3 * 8
+    assert set(frame["label"]) == {ladder.point_label(e) for e in ladder.LADDER_EPSILONS}
+    # The pairing that makes a later between-recipe test possible: identical
+    # cohort positions and labels at every ladder point, for every seed.
+    for (label, seed), block in frame.groupby(["label", "seed"]):
+        assert sorted(block["cohort_position"]) == list(range(8))
+    payload = json.loads((out / "noise_ladder.json").read_text())
+    assert payload["per_example_rows"] == 6 * 3 * 8
+    # Per-example rows live in the CSV, not inlined into the summary JSON.
+    assert "per_example" not in payload["points"][0]["seed_results"][0]
 
 
 def test_aggregation_fails_clearly_when_a_point_is_missing(tmp_path):

@@ -889,6 +889,26 @@ def run_seed(
     offline = lira_offline_attack(
         target_losses, attack_membership, out_matrix, fprs=ATTACK_FPRS
     )
+    # Per-example records are the raw design. They are what makes a later
+    # *paired* between-recipe comparison possible at all: the same cohort rows,
+    # in the same order, at every ladder point for a given target seed. Summary
+    # statistics alone would discard that pairing irrecoverably.
+    result["per_example"] = [
+        {
+            "label": result["label"],
+            "requested_epsilon": requested_epsilon,
+            "seed": int(seed),
+            "cohort_position": int(position),
+            "example_index": int(example_index),
+            "group": str(attack_groups[position]),
+            "membership": int(attack_membership[position]),
+            "target_loss": float(target_losses[position]),
+            "offline_score": float(offline.scores[position]),
+            "out_observations": int(len(out_losses[position])),
+            "in_observations": int(len(in_losses[position])),
+        }
+        for position, example_index in enumerate(attack_idx)
+    ]
     result.update(
         {
             "attack_status": "completed",
@@ -928,6 +948,9 @@ def run_seed(
                 seed + 30_000 + 1_000 * offset,
                 permutation_reps,
             )
+            if variant == "online_raw_loss":
+                for record, score in zip(result["per_example"], online.scores):
+                    record["online_raw_loss_score"] = float(score)
         # Back-compatible alias: "online" is the raw-loss variant.
         result["online"] = result["online_raw_loss"]
     else:
@@ -1037,6 +1060,59 @@ def apply_holm_across_points(points: list[dict[str, object]]) -> None:
                 adjusted = holm_adjust([float(e["p_value"]) for e in entries])
                 for entry, value in zip(entries, adjusted):
                     entry["p_value_holm"] = float(value)
+
+
+def verify_pairing(points: Sequence[dict[str, object]]) -> dict[str, dict[str, object]]:
+    """Check that every ladder point shares one cohort and schedule per seed.
+
+    The pre-registration asserts that cohort indices and shadow inclusion
+    schedules derive from the target seed alone. That assertion is only worth
+    anything if it is checked against the artifacts that were actually produced,
+    so aggregation refuses to proceed when two points disagree for a seed.
+
+    Raises:
+        ValueError: if any seed carries more than one cohort digest, schedule
+            digest, cohort size or training size across the supplied points.
+    """
+    fields = (
+        "cohort_index_digest",
+        "shadow_schedule_digest",
+        "num_attack_examples",
+        "train_size",
+    )
+    seen: dict[int, dict[str, dict[object, list[str]]]] = {}
+    for point in points:
+        for result in point["seed_results"]:
+            seed = int(result["seed"])
+            per_seed = seen.setdefault(seed, {field: {} for field in fields})
+            missing = [field for field in fields if result.get(field) is None]
+            if missing:
+                raise ValueError(
+                    f"ladder point {result['label']!r} seed {seed} is missing "
+                    f"{', '.join(missing)}, so its pairing cannot be verified"
+                )
+            for field in fields:
+                value = result.get(field)
+                per_seed[field].setdefault(value, []).append(str(result["label"]))
+
+    problems: list[str] = []
+    for seed in sorted(seen):
+        for field in fields:
+            values = seen[seed][field]
+            if len(values) > 1:
+                detail = "; ".join(
+                    f"{value} at {', '.join(labels)}" for value, labels in values.items()
+                )
+                problems.append(f"seed {seed}: {field} differs across points -- {detail}")
+    if problems:
+        raise ValueError(
+            "Ladder points are not paired, so no cross-point comparison is valid:\n  "
+            + "\n  ".join(problems)
+        )
+    return {
+        str(seed): {field: next(iter(seen[seed][field])) for field in fields}
+        for seed in sorted(seen)
+    }
 
 
 def summarise_points(points: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -1897,6 +1973,14 @@ def run_aggregate(args: argparse.Namespace) -> None:
         handle.close()
         raise SystemExit("Aggregation failed: no ladder-point artifacts found.")
 
+    try:
+        pairing = verify_pairing(points)
+    except ValueError as error:
+        log(str(error))
+        handle.close()
+        raise SystemExit(str(error)) from error
+    log(f"Pairing verified across {len(points)} points for seeds {sorted(pairing)}")
+
     apply_holm_across_points(points)
     summaries = summarise_points(points)
     frontier = detectability_frontier(summaries)
@@ -1905,8 +1989,31 @@ def run_aggregate(args: argparse.Namespace) -> None:
         observations, reps=int(points[0].get("bootstrap_reps", 1000)), seed=7
     )
 
+    # Per-example rows go to their own CSV: they are the design record a later
+    # paired between-recipe comparison needs, and they would swamp the summary
+    # JSON if inlined.
+    per_example_rows = [
+        record
+        for summary in summaries
+        for result in summary["seed_results"]
+        for record in (result.get("per_example") or [])
+    ]
+    if per_example_rows:
+        pd.DataFrame(per_example_rows).to_csv(output_dir / "per_example.csv", index=False)
+        log(f"Wrote {len(per_example_rows)} per-example rows to per_example.csv")
+    else:
+        log(
+            "WARNING: no per-example records found. These artifacts predate "
+            "per-example persistence and cannot support a paired between-recipe test."
+        )
+    for summary in summaries:
+        for result in summary["seed_results"]:
+            result.pop("per_example", None)
+
     payload = {
         "experiment": "detectability_noise_ladder",
+        "pairing": pairing,
+        "per_example_rows": len(per_example_rows),
         "task": TASK_NAME,
         "sensitive_attribute": SENSITIVE_ATTRIBUTE,
         "delta": DELTA,
