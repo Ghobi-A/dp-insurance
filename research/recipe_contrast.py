@@ -15,10 +15,21 @@ epsilon:
 with the null hypothesis "no recipe-dependent redistribution of subgroup
 leakage". Because the two recipes are run on deliberately paired designs --
 same target seeds, same cohort rows in the same order, same shadow inclusion
-schedule -- the correct null is an *exchange* of the two recipes' scores on the
-same example, not a reshuffle of membership labels. This module implements that
-paired, group-stratified permutation test and the pre-registered criteria a
-redistribution finding has to clear.
+schedule -- the correct null is an *exchange* of the two recipes, not a reshuffle
+of membership labels.
+
+The unit of that exchange is the **target seed**, not the example. Recipe is
+applied when a target model and its matched shadow ensemble are trained, so
+every example score within one seed carries the same single recipe assignment.
+The confirmatory test is therefore the exact paired sign-flip over seeds
+(``exact_paired_signflip_test``), enumerating all ``2^S`` assignments -- 256 at
+the eight pre-registered confirmatory seeds. Per-example exchange
+(``per_example_exchange_sensitivity``) is retained only as a labelled
+exploratory sensitivity analysis; treating hundreds of examples as independent
+recipe assignments would badly understate the null's spread.
+
+This module also holds the pre-registered criteria a redistribution finding has
+to clear.
 
 Nothing here trains a model. It consumes the per-example records both the
 detectability ladder and the iso-epsilon runner persist, so the design
@@ -76,7 +87,7 @@ FROZEN_RECIPES: dict[str, dict[str, object]] = {
         "accountant": "rdp",
         "train_size": 856,
         "num_shadows": 32,
-        "target_seeds": [42, 43, 44],
+        "target_seeds": [42, 43, 44, 45, 46, 47, 48, 49],
         "noise_multiplier": "solved independently at the ladder-selected epsilon",
     },
     "recipe_b": {
@@ -95,7 +106,7 @@ FROZEN_RECIPES: dict[str, dict[str, object]] = {
         "accountant": "rdp",
         "train_size": 856,
         "num_shadows": 32,
-        "target_seeds": [42, 43, 44],
+        "target_seeds": [42, 43, 44, 45, 46, 47, 48, 49],
         "noise_multiplier": "solved independently at the ladder-selected epsilon",
     },
 }
@@ -229,43 +240,174 @@ def resolution_by_seed(
     }
 
 
-def paired_recipe_permutation_test(
+def _per_seed_deltas(
+    groups: np.ndarray,
+    membership: np.ndarray,
+    seeds: np.ndarray,
+    scores_a: np.ndarray,
+    scores_b: np.ndarray,
+    unique_seeds: Sequence[int],
+    target_fpr: float,
+) -> dict[str, float]:
+    """``D_A,s - D_B,s`` for each target seed."""
+    deltas: dict[str, float] = {}
+    for value in unique_seeds:
+        mask = seeds == value
+        deltas[str(value)] = signed_contrast(
+            groups[mask], membership[mask], scores_a[mask], target_fpr
+        ) - signed_contrast(groups[mask], membership[mask], scores_b[mask], target_fpr)
+    return deltas
+
+
+def exact_paired_signflip_test(
+    rows_a: Iterable[dict[str, object]],
+    rows_b: Iterable[dict[str, object]],
+    target_fpr: float = HEADLINE_FPR,
+    max_enumerated_seeds: int = 20,
+    monte_carlo_reps: int = 100_000,
+    seed: int = 0,
+) -> dict[str, object]:
+    """**Confirmatory** test of ``T = mean_s(delta_D_s)`` at the seed level.
+
+    The randomisation unit is the *target seed*, because that is where recipe is
+    applied. Every example score within one seed comes from the same target
+    model and the same matched shadow ensemble, so the examples inside a seed
+    are not independently exchangeable recipe assignments -- swapping them
+    individually would treat one randomisation as hundreds and understate the
+    null's spread.
+
+    Under the paired recipe-exchange null, the complete Recipe A and Recipe B
+    score vectors exchange *together* within a seed. Exchanging both vectors for
+    seed ``s`` negates that seed's contrast exactly, so the null is the sign-flip
+    family
+
+    ``delta_D_s* = z_s * delta_D_s``, ``z_s in {-1, +1}``
+
+    and with ``S`` seeds it has ``2^S`` members, enumerated exhaustively (256 at
+    the eight pre-registered confirmatory seeds). The two-sided p-value is
+    ``count(|T*| >= |T_obs|) / 2^S`` -- exact, with no Monte Carlo error. Above
+    ``max_enumerated_seeds`` the enumeration is replaced by sampling and the
+    result is stamped as approximate.
+    """
+    shared, scores_a, scores_b = align_recipes(rows_a, rows_b)
+    groups = np.asarray([str(r["group"]) for r in shared])
+    membership = np.asarray([int(r["membership"]) for r in shared])
+    seeds_array = np.asarray([int(r["seed"]) for r in shared])
+    unique_seeds = sorted(set(seeds_array.tolist()))
+
+    observed_by_seed = _per_seed_deltas(
+        groups, membership, seeds_array, scores_a, scores_b, unique_seeds, target_fpr
+    )
+    deltas = np.asarray([observed_by_seed[str(s)] for s in unique_seeds], dtype=float)
+    observed = float(np.mean(deltas))
+    n_seeds = len(unique_seeds)
+
+    if n_seeds <= max_enumerated_seeds:
+        # Rows of +/-1 over the 2^S sign assignments, in binary-counter order.
+        bits = ((np.arange(2**n_seeds)[:, None] >> np.arange(n_seeds)) & 1).astype(float)
+        signs = 1.0 - 2.0 * bits
+        null = (signs * deltas[None, :]).mean(axis=1)
+        assignments = int(2**n_seeds)
+        exact = True
+    else:
+        rng = np.random.default_rng(seed)
+        signs = rng.choice([-1.0, 1.0], size=(monte_carlo_reps, n_seeds))
+        null = (signs * deltas[None, :]).mean(axis=1)
+        assignments = int(monte_carlo_reps)
+        exact = False
+
+    finite = null[np.isfinite(null)]
+    if not np.isfinite(observed) or finite.size == 0:
+        p_value = float("nan")
+    elif exact:
+        p_value = float(np.sum(np.abs(finite) >= abs(observed) - 1e-12) / assignments)
+    else:
+        extreme = int(np.sum(np.abs(finite) >= abs(observed) - 1e-12))
+        p_value = float((1 + extreme) / (assignments + 1))
+
+    return {
+        "test": "exact_paired_signflip",
+        "confirmatory": True,
+        "randomisation_unit": "target_seed",
+        "statistic": f"T = mean_s(delta_D_s), delta_D_s = (male-female TPR@{target_fpr:g}) A - B",
+        "alternative": "two-sided",
+        "exact": bool(exact),
+        "n_sign_assignments": assignments,
+        "n_seeds": int(n_seeds),
+        "n_examples": int(len(shared)),
+        "seeds": [int(s) for s in unique_seeds],
+        "observed": observed,
+        "observed_by_seed": observed_by_seed,
+        "null_distribution": [float(value) for value in null],
+        "null_mean": float(finite.mean()),
+        "null_min": float(finite.min()) if finite.size else float("nan"),
+        "null_max": float(finite.max()) if finite.size else float("nan"),
+        "p_value": p_value,
+        "resolution_by_seed": resolution_by_seed(groups, membership, seeds_array),
+        # Pooled across seeds; descriptive only, never used as a criterion.
+        "pooled_one_person_resolution": one_person_resolution(groups, membership),
+        "recipe_a_signed_by_seed": {
+            str(s): float(
+                signed_contrast(
+                    groups[seeds_array == s],
+                    membership[seeds_array == s],
+                    scores_a[seeds_array == s],
+                    target_fpr,
+                )
+            )
+            for s in unique_seeds
+        },
+        "recipe_b_signed_by_seed": {
+            str(s): float(
+                signed_contrast(
+                    groups[seeds_array == s],
+                    membership[seeds_array == s],
+                    scores_b[seeds_array == s],
+                    target_fpr,
+                )
+            )
+            for s in unique_seeds
+        },
+    }
+
+
+#: Stamped on every per-example-exchange result so it cannot be mistaken for the
+#: confirmatory p-value in a report or a downstream call.
+PER_EXAMPLE_WARNING = (
+    "EXPLORATORY SENSITIVITY ANALYSIS ONLY. This null exchanges recipe labels at "
+    "the individual-example level, but recipe is assigned at the trained-model / "
+    "target-seed level: every example within a seed shares one target model and "
+    "one matched shadow ensemble, so per-example exchanges are not independent "
+    "recipe assignments and this p-value is anti-conservative. The confirmatory "
+    "p-value is the exact seed-level sign-flip test."
+)
+
+
+def per_example_exchange_sensitivity(
     rows_a: Iterable[dict[str, object]],
     rows_b: Iterable[dict[str, object]],
     reps: int = 1000,
     seed: int = 0,
     target_fpr: float = HEADLINE_FPR,
 ) -> dict[str, object]:
-    """Test ``delta_D = D_A - D_B`` against a paired, group-stratified null.
+    """Exploratory per-example recipe exchange. **Not** the confirmatory test.
 
-    Under "no recipe-dependent redistribution", which recipe produced which of
-    an example's two scores carries no information, so the null distribution is
-    generated by swapping the pair on a random subset of examples. The swap is
-    drawn independently per example, which leaves every ``group x membership``
-    cell, the cohort geometry and the operating-point discreteness exactly as
-    observed; only the recipe labelling moves.
-
-    The statistic is computed per target seed and averaged, so a single seed
-    cannot carry the result through sheer cohort size, and the same swap draw is
-    applied across seeds within a replicate.
+    Retained because it answers a different, narrower question -- how much of the
+    observed contrast survives when the pairing is broken example by example --
+    and because dropping it would hide a sensitivity the earlier version of this
+    module reported. It never defines the confirmatory p-value: see
+    ``PER_EXAMPLE_WARNING``.
     """
     shared, scores_a, scores_b = align_recipes(rows_a, rows_b)
     groups = np.asarray([str(r["group"]) for r in shared])
     membership = np.asarray([int(r["membership"]) for r in shared])
-    seeds = np.asarray([int(r["seed"]) for r in shared])
-    unique_seeds = sorted(set(seeds.tolist()))
+    seeds_array = np.asarray([int(r["seed"]) for r in shared])
+    unique_seeds = sorted(set(seeds_array.tolist()))
 
-    def per_seed_deltas(left: np.ndarray, right: np.ndarray) -> dict[int, float]:
-        deltas: dict[int, float] = {}
-        for value in unique_seeds:
-            mask = seeds == value
-            deltas[value] = signed_contrast(
-                groups[mask], membership[mask], left[mask], target_fpr
-            ) - signed_contrast(groups[mask], membership[mask], right[mask], target_fpr)
-        return deltas
-
-    observed_by_seed = per_seed_deltas(scores_a, scores_b)
-    observed = float(np.mean([observed_by_seed[s] for s in unique_seeds]))
+    observed_by_seed = _per_seed_deltas(
+        groups, membership, seeds_array, scores_a, scores_b, unique_seeds, target_fpr
+    )
+    observed = float(np.mean([observed_by_seed[str(s)] for s in unique_seeds]))
 
     rng = np.random.default_rng(seed)
     null = np.empty(reps, dtype=float)
@@ -273,8 +415,10 @@ def paired_recipe_permutation_test(
         swap = rng.random(len(shared)) < 0.5
         left = np.where(swap, scores_b, scores_a)
         right = np.where(swap, scores_a, scores_b)
-        draws = per_seed_deltas(left, right)
-        null[rep] = float(np.mean([draws[s] for s in unique_seeds]))
+        draws = _per_seed_deltas(
+            groups, membership, seeds_array, left, right, unique_seeds, target_fpr
+        )
+        null[rep] = float(np.mean([draws[str(s)] for s in unique_seeds]))
 
     finite = null[np.isfinite(null)]
     extreme = int(np.sum(np.abs(finite) >= abs(observed))) if np.isfinite(observed) else 0
@@ -284,36 +428,22 @@ def paired_recipe_permutation_test(
     )
 
     return {
-        "statistic": "delta_D = (male-female TPR@%g) recipe A - recipe B" % target_fpr,
+        "test": "per_example_exchange",
+        "confirmatory": False,
+        "randomisation_unit": "example",
+        "warning": PER_EXAMPLE_WARNING,
         "alternative": "two-sided",
         "reps": int(reps),
         "n_examples": int(len(shared)),
         "seeds": [int(s) for s in unique_seeds],
         "observed": observed,
-        "observed_by_seed": {str(k): float(v) for k, v in observed_by_seed.items()},
+        "observed_by_seed": observed_by_seed,
         "null_mean": float(finite.mean()) if finite.size else float("nan"),
         "null_ci95_low": float(low),
         "null_ci95_high": float(high),
-        "p_value": p_value,
-        "resolution_by_seed": resolution_by_seed(groups, membership, seeds),
-        # Pooled across seeds; descriptive only, never used as a criterion.
+        "exploratory_p_value": p_value,
+        "resolution_by_seed": resolution_by_seed(groups, membership, seeds_array),
         "pooled_one_person_resolution": one_person_resolution(groups, membership),
-        "recipe_a_signed_by_seed": {
-            str(s): float(
-                signed_contrast(
-                    groups[seeds == s], membership[seeds == s], scores_a[seeds == s], target_fpr
-                )
-            )
-            for s in unique_seeds
-        },
-        "recipe_b_signed_by_seed": {
-            str(s): float(
-                signed_contrast(
-                    groups[seeds == s], membership[seeds == s], scores_b[seeds == s], target_fpr
-                )
-            )
-            for s in unique_seeds
-        },
     }
 
 
@@ -344,6 +474,15 @@ def classify_redistribution(
     Returns the verdict and the reason, which is written out whether or not the
     verdict is supportive -- a failing criterion is a result, not an omission.
     """
+    if not contrast.get("confirmatory", False) or contrast.get("randomisation_unit") != (
+        "target_seed"
+    ):
+        raise ValueError(
+            "classification requires the confirmatory seed-level sign-flip contrast; "
+            f"got randomisation_unit={contrast.get('randomisation_unit')!r}. "
+            "Per-example exchange is an exploratory sensitivity analysis and never "
+            "defines the confirmatory p-value."
+        )
     observed_by_seed = {str(k): float(v) for k, v in dict(contrast["observed_by_seed"]).items()}
     by_seed = np.asarray(list(observed_by_seed.values()), dtype=float)
     if "resolution_by_seed" not in contrast:

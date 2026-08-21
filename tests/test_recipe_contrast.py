@@ -33,7 +33,7 @@ apc = _load("attack_power_control", "research/attack_power_control.py")
 ladder = _load("detectability_noise_ladder", "research/detectability_noise_ladder.py")
 rc = _load("recipe_contrast", "research/recipe_contrast.py")
 
-SEEDS = (42, 43, 44)
+SEEDS = (42, 43, 44, 45, 46, 47, 48, 49)
 PER_CELL = 100
 
 
@@ -158,7 +158,7 @@ def test_null_design_does_not_produce_a_redistribution_verdict():
     rng = np.random.default_rng(7)
     a = _scored(rng, member_shift=0.8)
     b = _scored(rng, member_shift=0.8)
-    contrast = rc.paired_recipe_permutation_test(a, b, reps=400, seed=3)
+    contrast = rc.exact_paired_signflip_test(a, b)
     assert contrast["p_value"] > 0.05
     verdict, basis = rc.classify_redistribution(
         contrast,
@@ -175,7 +175,7 @@ def test_injected_redistribution_is_detected():
     rng = np.random.default_rng(11)
     a = _scored(rng, member_shift=0.3, male_member_shift=3.0)
     b = _scored(rng, member_shift=0.3, female_member_shift=3.0)
-    contrast = rc.paired_recipe_permutation_test(a, b, reps=400, seed=5)
+    contrast = rc.exact_paired_signflip_test(a, b)
     assert contrast["observed"] > max(contrast["resolution_by_seed"].values())
     assert contrast["p_value"] < 0.05
     verdict, basis = rc.classify_redistribution(
@@ -195,7 +195,7 @@ def test_reversed_injection_flips_the_sign_but_not_the_verdict():
     rng = np.random.default_rng(11)
     a = _scored(rng, member_shift=0.3, female_member_shift=3.0)
     b = _scored(rng, member_shift=0.3, male_member_shift=3.0)
-    contrast = rc.paired_recipe_permutation_test(a, b, reps=400, seed=5)
+    contrast = rc.exact_paired_signflip_test(a, b)
     assert contrast["observed"] < 0
     verdict, basis = rc.classify_redistribution(
         contrast,
@@ -217,7 +217,7 @@ def strong_contrast():
     rng = np.random.default_rng(11)
     a = _scored(rng, member_shift=0.3, male_member_shift=3.0)
     b = _scored(rng, member_shift=0.3, female_member_shift=3.0)
-    return rc.paired_recipe_permutation_test(a, b, reps=400, seed=5)
+    return rc.exact_paired_signflip_test(a, b)
 
 
 def test_criterion_aggregate_power_must_be_established(strong_contrast):
@@ -267,6 +267,8 @@ def test_criterion_multiplicity_adjusted_p_value_is_the_one_that_counts(strong_c
 
 def test_criterion_single_seed_effects_are_rejected():
     contrast = {
+        "confirmatory": True,
+        "randomisation_unit": "target_seed",
         "observed": 0.2,
         "observed_by_seed": {"42": 0.6, "43": 0.0, "44": 0.0},
         "resolution_by_seed": {"42": 0.01, "43": 0.01, "44": 0.01},
@@ -285,6 +287,8 @@ def test_criterion_single_seed_effects_are_rejected():
 
 def test_criterion_direction_must_be_reproducible_across_seeds():
     contrast = {
+        "confirmatory": True,
+        "randomisation_unit": "target_seed",
         "observed": 0.02,
         "observed_by_seed": {"42": 0.5, "43": -0.46, "44": 0.02},
         "resolution_by_seed": {"42": 0.01, "43": 0.01, "44": 0.01},
@@ -302,6 +306,8 @@ def test_criterion_direction_must_be_reproducible_across_seeds():
 
 def test_criterion_effect_must_exceed_one_person_resolution():
     contrast = {
+        "confirmatory": True,
+        "randomisation_unit": "target_seed",
         "observed": 0.004,
         "observed_by_seed": {"42": 0.004, "43": 0.004, "44": 0.004},
         "resolution_by_seed": {"42": 0.01, "43": 0.01, "44": 0.01},
@@ -319,6 +325,8 @@ def test_criterion_effect_must_exceed_one_person_resolution():
 
 def test_inconclusive_when_no_finite_contrast_exists():
     contrast = {
+        "confirmatory": True,
+        "randomisation_unit": "target_seed",
         "observed": float("nan"),
         "observed_by_seed": {"42": float("nan")},
         "resolution_by_seed": {"42": 0.01},
@@ -339,12 +347,12 @@ def test_inconclusive_when_no_finite_contrast_exists():
 # --------------------------------------------------------------------------- #
 
 
-def test_permutation_null_is_paired_and_group_stratified():
-    """A swap moves recipe labels only: cells and cohort geometry are fixed."""
+def test_confirmatory_null_is_paired_at_the_seed_level():
+    """An exchange moves whole recipe vectors within a seed, nothing else."""
     rng = np.random.default_rng(2)
     a = _scored(rng, member_shift=0.5)
     b = _scored(rng, member_shift=0.5)
-    contrast = rc.paired_recipe_permutation_test(a, b, reps=200, seed=1)
+    contrast = rc.exact_paired_signflip_test(a, b)
     assert contrast["n_examples"] == len(SEEDS) * 4 * PER_CELL
     # Resolution is per seed, on that seed's own cohort -- not the pooled count.
     assert contrast["resolution_by_seed"] == {
@@ -355,27 +363,32 @@ def test_permutation_null_is_paired_and_group_stratified():
     )
     assert contrast["seeds"] == list(SEEDS)
     # The paired null is symmetric about zero by construction.
-    assert contrast["null_mean"] == pytest.approx(0.0, abs=0.02)
-    assert contrast["null_ci95_low"] < 0 < contrast["null_ci95_high"]
+    # The exact sign-flip null is symmetric about zero by construction.
+    assert contrast["null_mean"] == pytest.approx(0.0, abs=1e-12)
+    assert contrast["null_min"] == pytest.approx(-contrast["null_max"])
+    assert contrast["n_sign_assignments"] == 2 ** len(SEEDS)
 
 
-def test_permutation_p_value_uses_the_finite_sample_correction():
+def test_identical_recipes_give_an_exact_p_of_one():
     rng = np.random.default_rng(4)
     a = _scored(rng, member_shift=0.5)
-    contrast = rc.paired_recipe_permutation_test(a, a, reps=50, seed=1)
-    # Identical recipes: delta_D is exactly zero and every draw ties it.
+    contrast = rc.exact_paired_signflip_test(a, a)
+    # Identical recipes: every delta_D_s is exactly zero, so every sign
+    # assignment ties the observation.
     assert contrast["observed"] == pytest.approx(0.0)
     assert contrast["p_value"] == pytest.approx(1.0)
 
 
-def test_permutation_test_is_reproducible():
+def test_exact_test_is_deterministic():
     rng = np.random.default_rng(6)
     a = _scored(rng, member_shift=0.4, male_member_shift=1.0)
     b = _scored(rng, member_shift=0.4)
-    first = rc.paired_recipe_permutation_test(a, b, reps=100, seed=9)
-    second = rc.paired_recipe_permutation_test(a, b, reps=100, seed=9)
+    first = rc.exact_paired_signflip_test(a, b)
+    second = rc.exact_paired_signflip_test(a, b)
+    # Exhaustive enumeration: no RNG is involved at all.
     assert first["p_value"] == second["p_value"]
     assert first["observed"] == second["observed"]
+    assert first["null_distribution"] == second["null_distribution"]
 
 
 def test_holm_adjustment_is_shared_with_the_ladder():
@@ -500,9 +513,7 @@ def test_resolution_by_seed_tracks_uneven_cohorts():
 
 def test_pooled_resolution_is_finer_than_every_per_seed_resolution():
     rng = np.random.default_rng(3)
-    contrast = rc.paired_recipe_permutation_test(
-        _scored(rng), _scored(rng), reps=20, seed=0
-    )
+    contrast = rc.exact_paired_signflip_test(_scored(rng), _scored(rng))
     pooled = contrast["pooled_one_person_resolution"]
     assert all(pooled < value for value in contrast["resolution_by_seed"].values())
 
@@ -515,6 +526,8 @@ def test_effect_clearing_pooled_but_no_per_seed_resolution_is_rejected():
     it is not a measurable effect on any seed and must be rejected.
     """
     contrast = {
+        "confirmatory": True,
+        "randomisation_unit": "target_seed",
         "observed": 0.005,
         "observed_by_seed": {"42": 0.005, "43": 0.005, "44": 0.005},
         "resolution_by_seed": {"42": 0.01, "43": 0.01, "44": 0.01},
@@ -536,6 +549,8 @@ def test_effect_clearing_pooled_but_no_per_seed_resolution_is_rejected():
 def test_mean_threshold_is_the_worst_case_per_seed_resolution():
     """A mean may not clear the bar by borrowing the finest seed's grid."""
     contrast = {
+        "confirmatory": True,
+        "randomisation_unit": "target_seed",
         "observed": 0.03,
         # Two seeds clear their own resolution, so criterion 3 passes.
         "observed_by_seed": {"42": 0.06, "43": 0.02, "44": 0.01},
@@ -554,6 +569,8 @@ def test_mean_threshold_is_the_worst_case_per_seed_resolution():
 
 def test_classification_refuses_a_contrast_without_per_seed_resolution():
     contrast = {
+        "confirmatory": True,
+        "randomisation_unit": "target_seed",
         "observed": 0.2,
         "observed_by_seed": {"42": 0.2, "43": 0.2, "44": 0.2},
         "one_person_resolution": 0.01,
@@ -570,6 +587,8 @@ def test_classification_refuses_a_contrast_without_per_seed_resolution():
 
 def test_classification_refuses_a_seed_with_no_resolution():
     contrast = {
+        "confirmatory": True,
+        "randomisation_unit": "target_seed",
         "observed": 0.2,
         "observed_by_seed": {"42": 0.2, "43": 0.2, "44": 0.2},
         "resolution_by_seed": {"42": 0.01, "43": 0.01},
@@ -691,3 +710,214 @@ def test_epsilon_tolerance_boundary_behaviour(strong_contrast):
     assert inside == rc.REDISTRIBUTION_SUPPORTED
     assert outside == rc.REDISTRIBUTION_UNSUPPORTED
     assert "not an iso-epsilon comparison" in basis
+
+
+# --------------------------------------------------------------------------- #
+# Randomisation unit: the target seed, not the example
+# --------------------------------------------------------------------------- #
+
+
+def test_per_example_swapping_is_not_the_confirmatory_test():
+    """A: the exploratory analysis cannot supply a confirmatory verdict."""
+    rng = np.random.default_rng(11)
+    a = _scored(rng, member_shift=0.3, male_member_shift=3.0)
+    b = _scored(rng, member_shift=0.3, female_member_shift=3.0)
+    exploratory = rc.per_example_exchange_sensitivity(a, b, reps=100, seed=1)
+
+    assert exploratory["confirmatory"] is False
+    assert exploratory["randomisation_unit"] == "example"
+    # It does not even expose a key named p_value.
+    assert "p_value" not in exploratory
+    assert "exploratory_p_value" in exploratory
+    assert "EXPLORATORY SENSITIVITY ANALYSIS ONLY" in exploratory["warning"]
+    assert "recipe is assigned at" in exploratory["warning"]
+
+    with pytest.raises(ValueError, match="confirmatory seed-level sign-flip"):
+        rc.classify_redistribution(
+            exploratory,
+            aggregate_power_established=True,
+            achieved_epsilon_a=8.0,
+            achieved_epsilon_b=8.0,
+        )
+
+
+def test_confirmatory_test_is_stamped_as_seed_level():
+    rng = np.random.default_rng(11)
+    contrast = rc.exact_paired_signflip_test(
+        _scored(rng, member_shift=0.3), _scored(rng, member_shift=0.3)
+    )
+    assert contrast["confirmatory"] is True
+    assert contrast["randomisation_unit"] == "target_seed"
+    assert contrast["test"] == "exact_paired_signflip"
+    assert contrast["exact"] is True
+
+
+def test_whole_recipe_vector_exchanges_together_within_a_seed():
+    """B: the null is exactly the sign-flip family over per-seed contrasts.
+
+    Exchanging both of a seed's complete score vectors negates that seed's
+    contrast and touches no other seed, so the enumerated null must equal the
+    set of means of ``z_s * delta_D_s``. Anything finer than the seed would
+    produce values outside that family.
+    """
+    rng = np.random.default_rng(11)
+    a = _scored(rng, member_shift=0.3, male_member_shift=2.0)
+    b = _scored(rng, member_shift=0.3, female_member_shift=2.0)
+    contrast = rc.exact_paired_signflip_test(a, b)
+
+    deltas = np.array([contrast["observed_by_seed"][str(s)] for s in SEEDS])
+    expected = sorted(
+        float(np.mean(deltas * signs))
+        for signs in _all_sign_vectors(len(SEEDS))
+    )
+    assert sorted(contrast["null_distribution"]) == pytest.approx(expected)
+
+    # Swapping the two recipes for one seed reproduces exactly one null member.
+    swapped_a = [dict(r) for r in a]
+    swapped_b = [dict(r) for r in b]
+    for left, right in zip(swapped_a, swapped_b):
+        if int(left["seed"]) == SEEDS[0]:
+            left["offline_score"], right["offline_score"] = (
+                right["offline_score"],
+                left["offline_score"],
+            )
+    swapped = rc.exact_paired_signflip_test(swapped_a, swapped_b)
+    flipped = deltas.copy()
+    flipped[0] *= -1
+    assert swapped["observed"] == pytest.approx(float(np.mean(flipped)))
+    # The null family is closed under a seed-level swap: same set of values,
+    # a different observation drawn from it. (The p-value moves with the
+    # observation, which is the point -- one seed is one randomisation.)
+    assert sorted(swapped["null_distribution"]) == pytest.approx(
+        sorted(contrast["null_distribution"])
+    )
+    assert any(
+        value == pytest.approx(float(np.mean(flipped)))
+        for value in contrast["null_distribution"]
+    )
+
+
+def _all_sign_vectors(n: int):
+    for mask in range(2**n):
+        yield np.array([1.0 if not (mask >> i) & 1 else -1.0 for i in range(n)])
+
+
+def test_eight_seeds_enumerate_exactly_256_assignments():
+    """C."""
+    rng = np.random.default_rng(2)
+    contrast = rc.exact_paired_signflip_test(_scored(rng), _scored(rng))
+    assert contrast["n_seeds"] == 8
+    assert contrast["n_sign_assignments"] == 256
+    assert len(contrast["null_distribution"]) == 256
+    assert contrast["exact"] is True
+    # Smallest attainable two-sided p at eight seeds.
+    assert min(contrast["p_value"], 2 / 256) >= 2 / 256 - 1e-12
+
+
+def test_reversing_the_recipes_negates_delta_but_not_the_two_sided_p():
+    """D."""
+    rng = np.random.default_rng(11)
+    a = _scored(rng, member_shift=0.3, male_member_shift=3.0)
+    b = _scored(rng, member_shift=0.3, female_member_shift=3.0)
+    forward = rc.exact_paired_signflip_test(a, b)
+    reverse = rc.exact_paired_signflip_test(b, a)
+
+    assert reverse["observed"] == pytest.approx(-forward["observed"])
+    for seed in SEEDS:
+        assert reverse["observed_by_seed"][str(seed)] == pytest.approx(
+            -forward["observed_by_seed"][str(seed)]
+        )
+    assert reverse["p_value"] == pytest.approx(forward["p_value"])
+
+
+def test_all_zero_contrasts_give_p_of_one():
+    """E."""
+    contrast = {
+        "confirmatory": True,
+        "randomisation_unit": "target_seed",
+        "observed": 0.0,
+        "observed_by_seed": {str(s): 0.0 for s in SEEDS},
+        "resolution_by_seed": {str(s): 0.01 for s in SEEDS},
+        "p_value": 1.0,
+    }
+    verdict, _ = rc.classify_redistribution(
+        contrast,
+        aggregate_power_established=True,
+        achieved_epsilon_a=8.0,
+        achieved_epsilon_b=8.0,
+    )
+    assert verdict == rc.REDISTRIBUTION_UNSUPPORTED
+
+    rng = np.random.default_rng(4)
+    a = _scored(rng, member_shift=0.5)
+    assert rc.exact_paired_signflip_test(a, a)["p_value"] == pytest.approx(1.0)
+
+
+def test_strong_consistent_contrast_rejects_and_is_supported():
+    """F."""
+    rng = np.random.default_rng(11)
+    a = _scored(rng, member_shift=0.3, male_member_shift=3.0)
+    b = _scored(rng, member_shift=0.3, female_member_shift=3.0)
+    contrast = rc.exact_paired_signflip_test(a, b)
+
+    assert contrast["p_value"] < 0.05
+    signs = {np.sign(v) for v in contrast["observed_by_seed"].values() if v != 0}
+    assert len(signs) == 1
+    verdict, _ = rc.classify_redistribution(
+        contrast,
+        aggregate_power_established=True,
+        achieved_epsilon_a=8.00,
+        achieved_epsilon_b=8.02,
+    )
+    assert verdict == rc.REDISTRIBUTION_SUPPORTED
+
+
+def test_large_effect_confined_to_one_seed_is_not_supported():
+    """G: eight seeds, one carrying everything -> no redistribution claim."""
+    by_seed = {str(s): 0.0 for s in SEEDS}
+    by_seed[str(SEEDS[0])] = 0.8
+    contrast = {
+        "confirmatory": True,
+        "randomisation_unit": "target_seed",
+        "observed": 0.8 / len(SEEDS),
+        "observed_by_seed": by_seed,
+        "resolution_by_seed": {str(s): 0.01 for s in SEEDS},
+        # Even a generous p cannot rescue a single-seed effect.
+        "p_value": 0.001,
+    }
+    verdict, basis = rc.classify_redistribution(
+        contrast,
+        aggregate_power_established=True,
+        achieved_epsilon_a=8.0,
+        achieved_epsilon_b=8.0,
+    )
+    assert verdict == rc.REDISTRIBUTION_UNSUPPORTED
+    assert "single-seed" in basis
+
+
+def test_frozen_recipes_carry_exactly_the_eight_confirmatory_seeds():
+    """H."""
+    expected = [42, 43, 44, 45, 46, 47, 48, 49]
+    for recipe in rc.FROZEN_RECIPES.values():
+        assert recipe["target_seeds"] == expected
+    assert 2 ** len(expected) == 256
+    text = PREREG.read_text()
+    assert "42, 43, 44, 45, 46, 47, 48, 49" in text
+    assert "2^8 = 256" in text or "256" in text
+
+
+def test_ladder_seeds_remain_three_and_are_not_the_confirmatory_seeds():
+    """I: the ladder's job is epsilon selection, and it does not change."""
+    assert ladder.DEFAULT_SEEDS == (42, 43, 44)
+    assert list(ladder.DEFAULT_SEEDS) != rc.FROZEN_RECIPES["recipe_a"]["target_seeds"]
+    text = PREREG.read_text()
+    assert "detectability ladder is unchanged at seeds 42, 43, 44" in text
+
+
+def test_preregistration_amendment_four_fixes_the_randomisation_unit():
+    text = PREREG.read_text()
+    assert "Amendment 4" in text
+    assert "randomisation unit is the target seed" in text
+    assert "exchange **together within a seed**" in text
+    assert "exploratory" in text and "sensitivity analysis" in text
+    assert "count(|T*| ≥ |T_obs|) / 2^S" in text

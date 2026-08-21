@@ -435,3 +435,102 @@ recipes fixed before ladder result
   reported and the comparison is not presented as iso-epsilon.
 * Exactly **one** pre-registered ΔD test is run. Neither recipe is retuned after
   its results are seen.
+
+---
+
+## Preregistration Amendment 4 — the randomisation unit is the target seed
+
+**Adopted before the authoritative detectability ladder was dispatched. No
+ladder result existed when this was written.**
+
+### What was wrong
+
+Amendment 2 §2c generated the ΔD null by exchanging the two recipes' scores
+**per example**. That does not respect the experimental unit. Recipe is applied
+at the trained-model level: every example score within one target seed comes
+from the same target model and the same matched shadow ensemble, and therefore
+carries a *single* recipe assignment. Exchanging examples independently treats
+one randomisation as several hundred, understates the null's spread, and yields
+an anti-conservative p-value.
+
+### The confirmatory test
+
+For each target seed `s`:
+
+```
+D_A,s  = male TPR@1% FPR_A,s − female TPR@1% FPR_A,s
+D_B,s  = male TPR@1% FPR_B,s − female TPR@1% FPR_B,s
+ΔD_s   = D_A,s − D_B,s
+
+T_obs  = mean_s(ΔD_s)
+```
+
+Under the paired recipe-exchange null the complete Recipe A and Recipe B score
+vectors exchange **together within a seed**. Exchanging both vectors for seed `s`
+negates that seed's contrast exactly, so the null is the sign-flip family
+
+```
+ΔD_s* = z_s · ΔD_s ,   z_s ∈ {−1, +1}
+```
+
+with `2^S` members, **enumerated exhaustively**. The two-sided randomisation
+p-value is
+
+```
+p = count(|T*| ≥ |T_obs|) / 2^S
+```
+
+exact, with no Monte Carlo error. Reported alongside it: observed ΔD by seed,
+mean ΔD, the complete exact null distribution, the number of sign assignments,
+and `resolution_by_seed`.
+
+Per-example exchange is **retained only as a clearly labelled exploratory
+sensitivity analysis**, stamped with a warning that it does not define the
+confirmatory p-value because recipe is assigned at model level. Code refuses to
+classify a redistribution verdict from anything but the seed-level test.
+
+### Eight confirmatory target seeds
+
+Three seeds give `2^3 = 8` sign assignments, so the smallest attainable
+two-sided p-value is 2/8 = 0.25 — the test could never reject at α = 0.05. The
+confirmatory iso-epsilon experiment is therefore frozen at **eight** target
+seeds:
+
+```
+42, 43, 44, 45, 46, 47, 48, 49
+```
+
+giving `2^8 = 256` assignments and a smallest attainable two-sided p of
+2/256 ≈ 0.0078. The same eight seeds are used for Recipe A and Recipe B.
+
+**The detectability ladder is unchanged at seeds 42, 43, 44.** Its sole role is
+selecting an operating ε from aggregate attack power.
+
+### Revised order of operations
+
+```text
+recipes frozen before ladder
+  -> 3-seed ladder selects epsilon using AGGREGATE attack power only
+  -> Recipe A and Recipe B independently calibrated to that epsilon
+  -> run both recipes on the 8 frozen confirmatory seeds
+  -> exact paired seed-level sign-flip ΔD test
+```
+
+Subgroup outcomes from the ladder are not used to alter the eight seeds, the
+recipes, the ε-selection rule or the statistic.
+
+### Criteria, unchanged except for the p-value's source
+
+With `r_s = 1 / min(male_members_s, female_members_s)`:
+
+1. aggregate leakage already established at that ε by the ladder;
+2. achieved ε gap ≤ 0.05;
+3. at least two seeds with `|ΔD_s| ≥ r_s`;
+4. reproducible non-zero direction across seeds;
+5. `|mean ΔD| ≥ max(r_s)`;
+6. **exact seed-level** randomisation p < 0.05, after multiplicity adjustment;
+7. the between-recipe contrast itself supported, not one recipe's `D ≠ 0`.
+
+If the direction criterion and the exact randomisation test conflict, the result
+is `UNSUPPORTED`. All eight criteria must hold together; there is no trade-off
+between them.
