@@ -80,8 +80,8 @@ multiplier** between finite points.
 
 ### Audit outcome
 
-Fourteen mechanical properties were checked against the implementation. Twelve
-held as written. Two did not, and were fixed before anything was run:
+Fourteen mechanical properties were checked against the implementation. Thirteen
+held as written; one did not, and was fixed before anything was run:
 
 | # | Property | Outcome |
 |---|---|---|
@@ -90,7 +90,7 @@ held as written. Two did not, and were fixed before anything was run:
 | 3 | Target and shadow training sizes identical | held; asserted per shadow at runtime |
 | 4 | Target and shadows share architecture, optimiser, epochs, batch size, clipping norm, noise multiplier and sampling | held; noise multiplier and achieved ε re-checked per shadow |
 | 5 | Achieved ε read from the accountant, never the requested value | held; both reported side by side |
-| 6 | Cohort indices and shadow schedules identical across points per seed | **FIXED** — digests were computed but never compared |
+| 6 | Cohort indices and shadow schedules identical across points per seed | **FIXED** — modular-sum digests were computed but never compared, and could not have verified exact pairing; now SHA-256 over canonical ordered encodings, compared at aggregation |
 | 7 | Offline LiRA primary | held |
 | 8 | ≥ 10 OUT observations per attacked example | held; offline LiRA aborts otherwise |
 | 9 | Online LiRA secondary, only with sufficient IN *and* OUT | held; reported unavailable otherwise |
@@ -103,8 +103,29 @@ held as written. Two did not, and were fixed before anything was run:
 A third gap was not on the audit list but blocks Phase 4: **per-example attack
 outputs were not persisted anywhere**, so the deliberately paired design (same
 seeds, cohort rows and shadow schedules) could not survive into a paired
-between-recipe analysis. Both fixes are recorded in Preregistration Amendment 2,
-adopted before the run.
+between-recipe analysis. That fix and the pairing fix above are both recorded in
+Preregistration Amendment 2, adopted before the run.
+
+A second audit pass, also before any dispatch, found and fixed three more:
+
+* **One-person resolution was pooled across target seeds.** The per-seed
+  contrasts are measured on per-seed cohorts, so pooling three seeds roughly
+  tripled the member count and understated the discrete grid by the same factor
+  — an effect above the pooled resolution but below every seed's own would have
+  passed. Resolution is now computed within each seed
+  (`1 / min(male_members[seed], female_members[seed])`), compared per seed, and
+  the across-seed mean is judged against `max(resolution_by_seed.values())`.
+  `resolution_by_seed` is persisted; the pooled figure is retained as
+  descriptive only.
+* **The pairing digests were modular index sums.** A sum is blind to ordering
+  and to which shadow a record belongs to, so it could not detect a reordered
+  cohort or a record moving between shadow sets. Replaced with SHA-256 over
+  canonical ordered encodings that include shadow position, per-shadow size and
+  set boundaries.
+* **The two follow-up recipes were described but not defined**, leaving room for
+  a post-result recipe search. Both are now frozen in full in Amendment 3 and
+  mirrored as `FROZEN_RECIPES` in `research/recipe_contrast.py`, with the
+  operating ε deliberately left out — it comes from the ladder's aggregate rule.
 
 ### Running the full ladder
 
@@ -203,6 +224,18 @@ The seven pre-registered criteria for a redistribution finding are listed in
 Preregistration Amendment 2, §2c. Criterion 7 is the one that distinguishes this
 from the original design: the **between-recipe** contrast must itself be
 supported; one recipe individually showing `D ≠ 0` is not sufficient.
+
+Criteria 3 and 5 use **per-seed** one-person resolution — each seed's contrast
+against its own cohort's grid, and the across-seed mean against the worst of
+them. The pooled figure is never a criterion.
+
+The two recipes are frozen in advance (Amendment 3): same architecture,
+optimiser, learning rate, regularisation, sampling, δ, accountant, train size,
+shadow count and target seeds; Recipe A runs batch 256 / 100 epochs / 400 steps
+at clipping norm 0.5, Recipe B batch 32 / 400 epochs / 10,800 steps at clipping
+norm 4.0. The order of operations is fixed: recipes frozen → ladder selects ε by
+the aggregate rule alone → both recipes calibrated independently to that ε
+(achieved ε within 0.05) → one ΔD test.
 
 Synthetic validation already performed: a null design (both recipes leaking
 identically) does not produce a redistribution verdict, and an injected

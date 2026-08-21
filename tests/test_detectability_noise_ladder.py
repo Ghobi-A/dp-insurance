@@ -294,8 +294,10 @@ def _seed_result(
         "test_size": 268,
         "cohort_counts": {"female|member=1": members, "male|member=1": members},
         "num_attack_examples": 4 * members,
-        "cohort_index_digest": 111_000 + seed,
-        "shadow_schedule_digest": 222_000 + seed,
+        "cohort_index_hash": ladder.cohort_index_hash(range(seed, seed + 8)),
+        "shadow_schedule_hash": ladder.shadow_schedule_hash(
+            [range(seed, seed + 4), range(seed + 4, seed + 8)]
+        ),
         "memorisation": {
             "train_auc": 0.99, "test_auc": 0.90,
             "train_loss": 0.05, "test_loss": 0.5,
@@ -646,20 +648,103 @@ def test_holm_is_applied_across_points_within_each_seed():
     ] == pytest.approx(0.003)
 
 
+# --------------------------------------------------------------------------- #
+# Pairing hashes
+# --------------------------------------------------------------------------- #
+
+
+def test_cohort_hash_is_order_sensitive():
+    """Same members, different order -> different hash.
+
+    The modular index sum this replaced could not tell these apart, yet
+    per-example records are compared position by position.
+    """
+    base = [7, 11, 13, 42]
+    reordered = [11, 7, 13, 42]
+    assert sorted(base) == sorted(reordered)
+    assert ladder.cohort_index_hash(base) != ladder.cohort_index_hash(reordered)
+
+
+def test_cohort_hash_is_stable_for_identical_input():
+    assert ladder.cohort_index_hash([1, 2, 3]) == ladder.cohort_index_hash((1, 2, 3))
+    assert ladder.cohort_index_hash(np.array([1, 2, 3])) == ladder.cohort_index_hash([1, 2, 3])
+    assert len(ladder.cohort_index_hash([1, 2, 3])) == 64
+
+
+def test_cohort_hash_changes_when_a_member_changes():
+    assert ladder.cohort_index_hash([1, 2, 3]) != ladder.cohort_index_hash([1, 2, 4])
+
+
+def test_shadow_hash_detects_a_record_moving_between_shadows():
+    """Identical global multiset, different assignment -> different hash."""
+    before = [[1, 2, 3], [4, 5, 6]]
+    after = [[1, 2, 4], [3, 5, 6]]
+    assert sorted(x for s in before for x in s) == sorted(x for s in after for x in s)
+    assert ladder.shadow_schedule_hash(before) != ladder.shadow_schedule_hash(after)
+
+
+def test_shadow_hash_detects_moved_set_boundaries():
+    """Same flat sequence, different boundaries -> different hash."""
+    assert ladder.shadow_schedule_hash([[1, 2], [3, 4]]) != ladder.shadow_schedule_hash(
+        [[1, 2, 3], [4]]
+    )
+    assert ladder.shadow_schedule_hash([[1, 2, 3, 4]]) != ladder.shadow_schedule_hash(
+        [[1, 2], [3, 4]]
+    )
+
+
+def test_shadow_hash_detects_reordered_shadows():
+    assert ladder.shadow_schedule_hash([[1, 2], [3, 4]]) != ladder.shadow_schedule_hash(
+        [[3, 4], [1, 2]]
+    )
+
+
+def test_shadow_hash_detects_order_within_one_shadow():
+    assert ladder.shadow_schedule_hash([[1, 2], [3, 4]]) != ladder.shadow_schedule_hash(
+        [[2, 1], [3, 4]]
+    )
+
+
+def test_identical_canonical_structures_hash_identically():
+    schedule = [[1, 2], [3, 4]]
+    assert ladder.shadow_schedule_hash(schedule) == ladder.shadow_schedule_hash(
+        [np.array([1, 2]), np.array([3, 4])]
+    )
+    assert len(ladder.shadow_schedule_hash(schedule)) == 64
+
+
+def test_real_schedule_hashes_agree_across_ladder_points_and_split_on_drift():
+    y_pool = np.tile([0, 1], 300)
+    schedules = [
+        apc.balanced_shadow_train_sets(y_pool, train_size=400, num_shadows=8, seed=10_042)[0]
+        for _ in ladder.LADDER_EPSILONS
+    ]
+    hashes = {ladder.shadow_schedule_hash(sets) for sets in schedules}
+    assert len(hashes) == 1
+    # Swap one record between two shadows: the multiset is unchanged.
+    drifted = [list(idx) for idx in schedules[0]]
+    moved = drifted[0].pop()
+    drifted[1].append(moved)
+    assert ladder.shadow_schedule_hash(drifted) not in hashes
+
+
 def test_pairing_verification_accepts_a_properly_paired_ladder():
     points = [_point(ladder.point_label(e), e) for e in ladder.LADDER_EPSILONS]
     pairing = ladder.verify_pairing(points)
     assert sorted(pairing) == ["42", "43", "44"]
-    assert pairing["42"]["cohort_index_digest"] == 111_042
-    assert pairing["43"]["shadow_schedule_digest"] == 222_043
+    assert pairing["42"]["cohort_index_hash"] == ladder.cohort_index_hash(range(42, 50))
+    assert pairing["43"]["shadow_schedule_hash"] == ladder.shadow_schedule_hash(
+        [range(43, 47), range(47, 51)]
+    )
 
 
 @pytest.mark.parametrize(
-    "field", ["cohort_index_digest", "shadow_schedule_digest", "num_attack_examples", "train_size"]
+    "field",
+    ["cohort_index_hash", "shadow_schedule_hash", "num_attack_examples", "train_size"],
 )
 def test_pairing_verification_rejects_a_point_that_drifted(field):
     points = [_point(ladder.point_label(e), e) for e in ladder.LADDER_EPSILONS]
-    points[3]["seed_results"][1][field] = 999_999
+    points[3]["seed_results"][1][field] = "drifted"
     with pytest.raises(ValueError) as excinfo:
         ladder.verify_pairing(points)
     message = str(excinfo.value)
@@ -668,10 +753,10 @@ def test_pairing_verification_rejects_a_point_that_drifted(field):
     assert "eps8" in message
 
 
-def test_pairing_verification_rejects_artifacts_without_digests():
+def test_pairing_verification_rejects_artifacts_without_hashes():
     points = [_point(ladder.point_label(e), e) for e in ladder.LADDER_EPSILONS[:2]]
-    del points[1]["seed_results"][0]["cohort_index_digest"]
-    with pytest.raises(ValueError, match="cohort_index_digest"):
+    del points[1]["seed_results"][0]["cohort_index_hash"]
+    with pytest.raises(ValueError, match="cohort_index_hash"):
         ladder.verify_pairing(points)
 
 
@@ -681,7 +766,7 @@ def test_aggregation_fails_loudly_when_points_are_not_paired(tmp_path):
     for epsilon in ladder.LADDER_EPSILONS:
         point = _point(ladder.point_label(epsilon), epsilon)
         if epsilon == 4.0:
-            point["seed_results"][0]["cohort_index_digest"] = 7
+            point["seed_results"][0]["cohort_index_hash"] = "7"
         (points_dir / f"{point['label']}.json").write_text(json.dumps(point, default=float))
 
     args = ladder.argparse.Namespace(

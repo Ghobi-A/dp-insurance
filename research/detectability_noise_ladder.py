@@ -35,6 +35,7 @@ Aggregate completed points into the final report::
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -98,6 +99,37 @@ DETECTABLE_STATUSES = (DETECTABLE_WITH_MEMORISATION, DETECTABLE_LOW_MEMORISATION
 SUBGROUP_SUPPORTED = "SUBGROUP DISPARITY SUPPORTED"
 SUBGROUP_UNSUPPORTED = "SUBGROUP DISPARITY UNSUPPORTED"
 SUBGROUP_INCONCLUSIVE = "SUBGROUP DISPARITY INCONCLUSIVE"
+
+
+def cohort_index_hash(attack_idx: Sequence[int]) -> str:
+    """SHA-256 over the attack cohort in its exact order.
+
+    A modular sum of the indices was used previously and was not fit for
+    purpose: sums are blind to ordering, so two cohorts holding the same rows in
+    a different order hashed identically. Position is part of the pairing --
+    per-example records are compared position by position across ladder points
+    and later across recipes -- so the canonical encoding is ordinal.
+    """
+    payload = "cohort|v2|" + ",".join(str(int(value)) for value in attack_idx)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def shadow_schedule_hash(train_sets: Sequence[Sequence[int]]) -> str:
+    """SHA-256 over the shadow schedule, including its set boundaries.
+
+    Each shadow contributes its position, its size and its training indices in
+    order, and the shadows are joined by a separator that cannot occur inside a
+    shadow's own encoding. Moving one record from shadow 3 to shadow 7 therefore
+    changes the hash even though the global multiset of indices is unchanged --
+    which the previous modular sum could not detect, and which is exactly the
+    failure that would silently break IN/OUT pairing.
+    """
+    blocks = [
+        f"{position}:{len(indices)}:" + ",".join(str(int(value)) for value in indices)
+        for position, indices in enumerate(train_sets)
+    ]
+    payload = f"schedule|v2|{len(blocks)}|" + "|".join(blocks)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def point_label(epsilon: float | None) -> str:
@@ -785,7 +817,7 @@ def run_seed(
         "test_size": int(len(y_test)),
         "cohort_counts": cohort_counts,
         "num_attack_examples": int(len(attack_idx)),
-        "cohort_index_digest": int(np.sum(attack_idx.astype(np.int64) * 2654435761) % (2**31)),
+        "cohort_index_hash": cohort_index_hash(attack_idx),
         "memorisation": metrics,
         "memorisation_gate": MEMORISATION_GATE,
         "memorisation_gate_passed": bool(gate_passed),
@@ -820,9 +852,7 @@ def run_seed(
     train_sets, excluded_counts = balanced_shadow_train_sets(
         y_pool, train_size=len(y_train), num_shadows=num_shadows, seed=schedule_seed
     )
-    result["shadow_schedule_digest"] = int(
-        np.sum(np.concatenate(train_sets).astype(np.int64) * 2654435761) % (2**31)
-    )
+    result["shadow_schedule_hash"] = shadow_schedule_hash(train_sets)
 
     target_losses = per_example_bce(
         y_attack[attack_idx], predict_probability(target, X_attack)[attack_idx]
@@ -1071,12 +1101,12 @@ def verify_pairing(points: Sequence[dict[str, object]]) -> dict[str, dict[str, o
     so aggregation refuses to proceed when two points disagree for a seed.
 
     Raises:
-        ValueError: if any seed carries more than one cohort digest, schedule
-            digest, cohort size or training size across the supplied points.
+        ValueError: if any seed carries more than one cohort hash, schedule
+            hash, cohort size or training size across the supplied points.
     """
     fields = (
-        "cohort_index_digest",
-        "shadow_schedule_digest",
+        "cohort_index_hash",
+        "shadow_schedule_hash",
         "num_attack_examples",
         "train_size",
     )

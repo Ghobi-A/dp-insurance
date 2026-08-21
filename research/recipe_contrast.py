@@ -52,6 +52,69 @@ REDISTRIBUTION_SUPPORTED = "RECIPE REDISTRIBUTION SUPPORTED"
 REDISTRIBUTION_UNSUPPORTED = "RECIPE REDISTRIBUTION UNSUPPORTED"
 REDISTRIBUTION_INCONCLUSIVE = "RECIPE REDISTRIBUTION INCONCLUSIVE"
 
+#: The two DP-SGD recipes for the conditional iso-epsilon follow-up, frozen
+#: **before** any authoritative ladder result exists so that no recipe search
+#: can follow from seeing the results. Everything except the training dynamics
+#: is held identical, and the operating epsilon is deliberately absent: it is
+#: supplied by the ladder's aggregate detectability rule, never chosen here and
+#: never chosen from subgroup outcomes. Mirrors
+#: ``docs/NOISE_LADDER_PREREGISTRATION.md`` Amendment 3.
+FROZEN_RECIPES: dict[str, dict[str, object]] = {
+    "recipe_a": {
+        "name": "large-batch, few steps, tight clipping",
+        "architecture": "Linear(d,128)->ReLU->Linear(128,128)->ReLU->Linear(128,64)->ReLU->Linear(64,1)",
+        "optimiser": "Adam",
+        "learning_rate": 1e-3,
+        "batch_size": 256,
+        "epochs": 100,
+        "optimisation_steps": 400,
+        "max_grad_norm": 0.5,
+        "regularisation": "none",
+        "sampling": "poisson",
+        "sample_rate": 256 / 856,
+        "delta": 1e-5,
+        "accountant": "rdp",
+        "train_size": 856,
+        "num_shadows": 32,
+        "target_seeds": [42, 43, 44],
+        "noise_multiplier": "solved independently at the ladder-selected epsilon",
+    },
+    "recipe_b": {
+        "name": "small-batch, many steps, loose clipping",
+        "architecture": "Linear(d,128)->ReLU->Linear(128,128)->ReLU->Linear(128,64)->ReLU->Linear(64,1)",
+        "optimiser": "Adam",
+        "learning_rate": 1e-3,
+        "batch_size": 32,
+        "epochs": 400,
+        "optimisation_steps": 10_800,
+        "max_grad_norm": 4.0,
+        "regularisation": "none",
+        "sampling": "poisson",
+        "sample_rate": 32 / 856,
+        "delta": 1e-5,
+        "accountant": "rdp",
+        "train_size": 856,
+        "num_shadows": 32,
+        "target_seeds": [42, 43, 44],
+        "noise_multiplier": "solved independently at the ladder-selected epsilon",
+    },
+}
+
+#: Fields the two recipes must hold in common, and those they must differ on.
+RECIPE_SHARED_FIELDS = (
+    "architecture",
+    "optimiser",
+    "learning_rate",
+    "regularisation",
+    "sampling",
+    "delta",
+    "accountant",
+    "train_size",
+    "num_shadows",
+    "target_seeds",
+)
+RECIPE_DIVERGENT_FIELDS = ("batch_size", "epochs", "optimisation_steps", "max_grad_norm")
+
 #: Field names expected on every per-example record.
 REQUIRED_FIELDS = ("seed", "cohort_position", "group", "membership", "offline_score")
 
@@ -129,7 +192,13 @@ def signed_contrast(
 
 
 def one_person_resolution(groups: np.ndarray, membership: np.ndarray) -> float:
-    """Smallest subgroup TPR movement a single member can produce."""
+    """Smallest subgroup TPR movement a single member can produce.
+
+    Applied to a single seed's cohort this is the resolution that governs that
+    seed's contrast. Applied to several seeds pooled it is **descriptive only**:
+    pooling multiplies the member count and so understates the grid the
+    per-seed statistics actually move on.
+    """
     groups = np.asarray(groups).astype(str)
     membership = np.asarray(membership)
     counts = [
@@ -137,6 +206,27 @@ def one_person_resolution(groups: np.ndarray, membership: np.ndarray) -> float:
         for group in np.unique(groups)
     ]
     return 1.0 / max(min(counts) if counts else 1, 1)
+
+
+def resolution_by_seed(
+    groups: np.ndarray,
+    membership: np.ndarray,
+    seeds: np.ndarray,
+) -> dict[str, float]:
+    """One-person TPR resolution computed within each target seed's own cohort.
+
+    ``1 / min(male_member_count, female_member_count)`` for that seed alone.
+    Each seed's contrast is measured on its own cohort, so this is the grid its
+    contrast can move on; the pooled figure is coarser by roughly the number of
+    seeds and would let a sub-resolution effect pass.
+    """
+    groups = np.asarray(groups).astype(str)
+    membership = np.asarray(membership)
+    seeds = np.asarray(seeds)
+    return {
+        str(seed): one_person_resolution(groups[seeds == seed], membership[seeds == seed])
+        for seed in sorted(set(seeds.tolist()))
+    }
 
 
 def paired_recipe_permutation_test(
@@ -205,7 +295,9 @@ def paired_recipe_permutation_test(
         "null_ci95_low": float(low),
         "null_ci95_high": float(high),
         "p_value": p_value,
-        "one_person_resolution": one_person_resolution(groups, membership),
+        "resolution_by_seed": resolution_by_seed(groups, membership, seeds),
+        # Pooled across seeds; descriptive only, never used as a criterion.
+        "pooled_one_person_resolution": one_person_resolution(groups, membership),
         "recipe_a_signed_by_seed": {
             str(s): float(
                 signed_contrast(
@@ -239,18 +331,34 @@ def classify_redistribution(
 
     All seven must hold: aggregate attack power established at this epsilon;
     achieved epsilons matched within the predeclared tolerance; the effect not
-    driven by one seed; direction reproducible across seeds; effect above
-    one-person resolution; the permutation null rejected after multiplicity
-    adjustment; and the *between-recipe* contrast itself supported, not merely
-    one recipe individually showing ``D != 0``.
+    driven by one seed, judged per seed against *that seed's own* one-person
+    resolution; direction reproducible across seeds; the mean effect above the
+    worst-case per-seed resolution; the permutation null rejected after
+    multiplicity adjustment; and the *between-recipe* contrast itself supported,
+    not merely one recipe individually showing ``D != 0``.
+
+    The pooled-across-seeds resolution is never a criterion: pooling three
+    seeds' cohorts roughly triples the member count and would admit effects
+    finer than any single seed can actually resolve.
 
     Returns the verdict and the reason, which is written out whether or not the
     verdict is supportive -- a failing criterion is a result, not an omission.
     """
-    by_seed = np.asarray(
-        [float(v) for v in dict(contrast["observed_by_seed"]).values()], dtype=float
-    )
-    resolution = float(contrast["one_person_resolution"])
+    observed_by_seed = {str(k): float(v) for k, v in dict(contrast["observed_by_seed"]).items()}
+    by_seed = np.asarray(list(observed_by_seed.values()), dtype=float)
+    if "resolution_by_seed" not in contrast:
+        raise ValueError(
+            "contrast is missing resolution_by_seed; the pooled resolution is "
+            "descriptive only and must not be used as a criterion"
+        )
+    resolutions = {str(k): float(v) for k, v in dict(contrast["resolution_by_seed"]).items()}
+    missing = sorted(set(observed_by_seed) - set(resolutions))
+    if missing:
+        raise ValueError(f"no per-seed resolution for seed(s) {', '.join(missing)}")
+    # Pre-registered threshold for the across-seed mean: the most conservative
+    # of the per-seed grids, so a mean cannot clear the bar by borrowing the
+    # finest cohort's resolution.
+    mean_threshold = max(resolutions[seed] for seed in observed_by_seed)
     p_value = (
         float(contrast["p_value"]) if adjusted_p_value is None else float(adjusted_p_value)
     )
@@ -273,7 +381,9 @@ def classify_redistribution(
         epsilon_gap = float("nan")
     else:
         epsilon_gap = abs(float(achieved_epsilon_a) - float(achieved_epsilon_b))
-        if epsilon_gap > epsilon_tolerance:
+        # 1e-9 of slack so a gap exactly at the declared tolerance is not
+        # rejected by floating-point representation alone.
+        if epsilon_gap > epsilon_tolerance + 1e-9:
             failures.append(
                 f"achieved epsilons differ by {epsilon_gap:.4f} > {epsilon_tolerance}, so "
                 "this is not an iso-epsilon comparison"
@@ -283,17 +393,24 @@ def classify_redistribution(
     if not nonzero.size or not np.all(np.sign(nonzero) == np.sign(nonzero[0])):
         failures.append("the sign of the between-recipe contrast is not reproducible across seeds")
 
-    carrying = int(np.sum(np.abs(by_seed) >= resolution))
-    if carrying < 2:
+    # Each seed is judged against its own cohort's one-person grid.
+    carrying_seeds = [
+        seed
+        for seed, value in observed_by_seed.items()
+        if np.isfinite(value) and abs(value) >= resolutions[seed]
+    ]
+    if len(carrying_seeds) < 2:
         failures.append(
-            f"only {carrying} seed(s) carry a contrast at or above the "
-            f"{resolution:.4f} one-person resolution, so the effect is single-seed"
+            f"only {len(carrying_seeds)} seed(s) carry a contrast at or above that "
+            "seed's own one-person resolution ("
+            + ", ".join(f"seed {seed}: {value:.4f}" for seed, value in resolutions.items())
+            + "), so the effect is single-seed"
         )
 
-    if abs(float(contrast["observed"])) < resolution:
+    if abs(float(contrast["observed"])) < mean_threshold:
         failures.append(
             f"the mean contrast {float(contrast['observed']):.4f} is within the "
-            f"{resolution:.4f} one-person TPR resolution"
+            f"{mean_threshold:.4f} worst-case per-seed one-person TPR resolution"
         )
 
     if not np.isfinite(p_value) or p_value >= alpha:
@@ -314,7 +431,9 @@ def classify_redistribution(
         (
             f"The paired between-recipe contrast delta_D = {float(contrast['observed']):.4f} "
             f"keeps one sign across seeds ({direction} exposes male records relatively more), "
-            f"exceeds the {resolution:.4f} one-person resolution on at least two seeds, and "
+            f"exceeds each seed's own one-person resolution on seeds "
+            f"{', '.join(carrying_seeds)} and clears the {mean_threshold:.4f} worst-case "
+            "per-seed resolution in the mean, and "
             f"the paired permutation null is rejected (adjusted p = {p_value:.4f}) with "
             f"achieved epsilons matched to within {epsilon_gap:.4f}. This is an empirical "
             "finding for this dataset, task, architecture, adversary and pair of recipes; "

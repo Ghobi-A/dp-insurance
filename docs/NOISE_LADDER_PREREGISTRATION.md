@@ -278,10 +278,25 @@ irrecoverably, and a paired analysis cannot be reconstructed after the fact.
 
 The original registration listed "cohort indices identical across ladder points"
 and "shadow inclusion schedules identical across ladder points" under
-*assertions enforced in code*. They were computed as digests but never compared.
-Aggregation now checks, per target seed and across every ladder point, that the
-cohort digest, shadow-schedule digest, attack-cohort size and training size all
-agree, and **fails loudly** otherwise. A point artifact that carries no digests
+*assertions enforced in code*. They were computed as modular index sums but
+never compared — and a modular sum could not have verified them in any case,
+being blind to ordering and to which shadow a record belongs to.
+
+Pairing is now verified by **SHA-256 hashes over canonical, ordered
+representations**:
+
+* **Cohort hash** — `sha256("cohort|v2|" + comma-joined attack indices in their
+  exact order)`. Reordering the same cohort members changes the hash.
+* **Shadow-schedule hash** — each shadow contributes
+  `"{position}:{size}:{comma-joined training indices in order}"`, the blocks are
+  joined by `|`, and the whole is prefixed `"schedule|v2|{number of shadows}|"`.
+  Moving one record from one shadow to another changes the hash even when the
+  global multiset of indices is identical, because position, per-shadow size and
+  the block boundaries are all part of the encoding.
+
+Aggregation checks, per target seed and across every ladder point, that the
+cohort hash, shadow-schedule hash, attack-cohort size and training size all
+agree, and **fails loudly** otherwise. A point artifact that carries no hashes
 cannot be verified and is rejected rather than assumed paired.
 
 ### 2c. The between-recipe contrast (conditional follow-up)
@@ -314,17 +329,109 @@ A redistribution finding requires **all** of:
 2. the two recipes' **achieved** ε matched within a predeclared tolerance of
    **0.05** (requested ε is never substituted for achieved ε);
 3. the effect not driven by a single seed — at least two seeds carry a contrast
-   at or above one-person TPR resolution;
+   at or above **that seed's own** one-person TPR resolution (see below);
 4. the sign of ΔD reproducible across seeds;
-5. the mean effect exceeding one-person TPR resolution
-   `1 / subgroup_member_count`;
+5. the mean effect exceeding the **worst-case per-seed** resolution,
+   `abs(mean ΔD) >= max(resolution_by_seed.values())`;
 6. the paired permutation null rejected at α = 0.05 after multiplicity
    adjustment;
 7. the **between-recipe** contrast supported — one recipe individually showing
    `D ≠ 0` is explicitly not sufficient.
+
+### One-person resolution is per seed
+
+Resolution is computed **within each target seed's own cohort**:
+
+```
+resolution_by_seed[seed] = 1 / min(male_member_count[seed], female_member_count[seed])
+```
+
+and criterion 3 compares `abs(ΔD_seed) >= resolution_by_seed[seed]` for each
+seed independently. Criterion 5 uses the conservative
+`abs(mean ΔD) >= max(resolution_by_seed.values())`.
+
+The pooled-across-seeds member count is **not** used for either criterion and is
+retained as a descriptive figure only. Pooling three seeds roughly triples the
+member count and so understates the discrete grid each seed's contrast actually
+moves on; an effect that clears the pooled resolution but no single seed's own
+resolution is rejected. `resolution_by_seed` is persisted in the contrast output
+and reported.
 
 Failing any criterion yields `RECIPE REDISTRIBUTION UNSUPPORTED`; no finite
 per-seed contrast at all yields `RECIPE REDISTRIBUTION INCONCLUSIVE`. A
 supported result is stated as an empirical finding for this dataset, task,
 architecture, adversary and pair of recipes. ε remains the formal global
 worst-case guarantee and is never described as subgroup-specific.
+
+---
+
+## Preregistration Amendment 3 — the two iso-epsilon recipes, frozen before any ladder result
+
+**Adopted before the authoritative detectability ladder was dispatched. No
+ladder result existed when these definitions were written, so no recipe search
+can have followed from seeing one.**
+
+Amendment 2 §2c specified "two materially different DP-SGD recipes" without
+saying which. That leaves room for a post-result recipe search, which would
+invalidate the ΔD test however carefully the test itself is run. The two recipes
+are therefore fixed here, in full, in advance. They are mirrored as
+`FROZEN_RECIPES` in `research/recipe_contrast.py` so the frozen definitions and
+the code cannot drift apart unnoticed.
+
+### Held identical across both recipes
+
+| Parameter | Value |
+|---|---|
+| Dataset / task | insurance `high_cost` |
+| Sensitive attribute | `sex` |
+| Architecture | `Linear(d,128) → ReLU → Linear(128,128) → ReLU → Linear(128,64) → ReLU → Linear(64,1)` |
+| Optimiser | Adam |
+| Learning rate | 1e-3 |
+| Regularisation | none (no dropout, no weight decay, no early stopping) |
+| Sampling | Poisson |
+| δ | 1e-5 |
+| Accountant | RDP |
+| Target train size | 856 (shadows exactly matched) |
+| Shadows per recipe per seed | 32 |
+| Target seeds | 42, 43, 44 |
+| Attack cohort, shadow inclusion schedule, attack implementation, threat model, subgroup statistic | identical, and verified by the hashes in Amendment 2 §2b |
+
+### Differing materially in training dynamics
+
+| Parameter | **Recipe A** — large-batch, few steps, tight clipping | **Recipe B** — small-batch, many steps, loose clipping |
+|---|---:|---:|
+| Batch size | 256 | 32 |
+| Epochs | 100 | 400 |
+| Optimisation steps | 400 | 10,800 |
+| Sample rate | 256/856 ≈ 0.2991 | 32/856 ≈ 0.0374 |
+| Clipping norm | 0.5 | 4.0 |
+| Noise multiplier | solved independently at the operating ε | solved independently at the operating ε |
+
+The two differ by a factor of 27 in optimisation steps, a factor of 8 in batch
+size and sample rate, and a factor of 8 in clipping norm — materially different
+training dynamics, reached through the same architecture and the same downstream
+attack.
+
+### Order of operations — fixed, and not negotiable after the fact
+
+```text
+recipes fixed before ladder result
+  -> ladder selects the operating epsilon using the AGGREGATE leakage rule only
+  -> both recipes calibrated independently to that epsilon
+  -> one pre-registered ΔD test
+```
+
+* The operating ε is **conditional** on the ladder and is read from the
+  aggregate detectability rule alone (mean offline-LiRA AUC ≥ 0.55, AUC > 0.5 on
+  every seed, Holm-adjusted permutation rejection on ≥ 2 of 3 seeds). Subgroup
+  ladder results are **not** inspected to choose ε, and are not inspected to
+  choose or modify the recipes.
+* If no finite ladder point clears the aggregate rule, the follow-up does not
+  run at all.
+* At the chosen finite point, each recipe's noise multiplier is solved
+  independently for its own sample rate and step count, and the two **achieved**
+  ε values must differ by ≤ 0.05 (Amendment 2, criterion 2). Requested ε is
+  never substituted for achieved ε; if the tolerance cannot be met, that is
+  reported and the comparison is not presented as iso-epsilon.
+* Exactly **one** pre-registered ΔD test is run. Neither recipe is retuned after
+  its results are seen.
