@@ -1,0 +1,265 @@
+name: Study 2 Phase 0 natural leakage
+
+# Manual dispatch only for the real gate, plus lint/tests/smoke on pull requests
+# that touch Phase 0. Phase 0 is evaluated ONCE on the frozen ACS slice and its
+# verdict is terminal for the natural-leakage branch, so it must never start
+# from a push, a schedule, or a merge.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: >-
+          Type RUN-PHASE-0 to confirm. The gate is evaluated once on the frozen
+          slice; a FAIL closes the natural-leakage branch permanently.
+        required: true
+        default: ""
+      permutation_reps:
+        description: Membership-permutation replicates (frozen at 1000)
+        required: false
+        default: "1000"
+  pull_request:
+    paths:
+      - research/study2_phase0_natural_leakage.py
+      - research/study2_acs_slice.py
+      - tests/test_study2_phase0.py
+      - docs/STUDY2_PHASE0_PREREGISTRATION.md
+      - .github/workflows/study2-phase0-natural-leakage.yml
+
+concurrency:
+  group: study2-phase0-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  STUDY2_ACS_CACHE: ${{ github.workspace }}/.acs-cache
+
+jobs:
+  # Pull requests get lint, unit tests and a synthetic smoke run only. The smoke
+  # run never touches the network and its report is stamped "not a Phase 0
+  # result", so a PR can never produce a gate verdict.
+  validate:
+    name: Lint, tests and smoke run
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[experimental,dev]"
+      - name: Ruff lint
+        run: ruff check src tests research/study2_phase0_natural_leakage.py research/study2_acs_slice.py
+      - name: Unit tests
+        run: python -m pytest tests/ -q -m "not slow"
+      - name: Smoke run (synthetic slice, tiny budgets, three seeds)
+        run: |
+          set -euo pipefail
+          python research/study2_acs_slice.py prepare --output /tmp/smoke/slice.csv --smoke
+          python research/study2_acs_slice.py verify --slice /tmp/smoke/slice.csv
+          for seed in 42 43 44; do
+            python research/study2_phase0_natural_leakage.py seed \
+              --slice /tmp/smoke/slice.csv --seed "$seed" \
+              --epochs 2 --shadows 4 --permutation-reps 20 --smoke \
+              --output-dir /tmp/smoke/seeds
+          done
+          python research/study2_phase0_natural_leakage.py aggregate \
+            --input-dir /tmp/smoke/seeds --output-dir /tmp/smoke/out --expect-all \
+            | tee /tmp/smoke/out.log
+          test -f /tmp/smoke/out/phase0_gate.json
+          test -f /tmp/smoke/out/phase0_gate.csv
+          test -f /tmp/smoke/out/phase0_gate.md
+          # Per-example records are the raw design; losing them is unrecoverable.
+          test -f /tmp/smoke/out/per_example.csv
+          grep -Eq '^CONTINUATION GATE: (PASS|FAIL)$' /tmp/smoke/out.log
+          # A smoke verdict must never be readable as the Phase 0 gate.
+          grep -q 'Not a Phase 0 result' /tmp/smoke/out/phase0_gate.md
+      - name: Upload smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-smoke
+          path: /tmp/smoke/out
+          if-no-files-found: warn
+
+  prepare-slice:
+    name: Download and verify the frozen ACS slice
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Confirm the one-shot dispatch
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "RUN-PHASE-0" ]; then
+            echo "Refusing to run: confirmation input must be exactly RUN-PHASE-0." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "."
+      - name: Cache the ACS PUMS archive
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STUDY2_ACS_CACHE }}
+          key: acs-pums-ca-2018-1year-v1
+      - name: Materialise the frozen slice
+        run: |
+          python research/study2_acs_slice.py prepare \
+            --output slice/acs_income_ca_2018.csv \
+            --cache-dir "$STUDY2_ACS_CACHE"
+      - name: Verify row count and slice metadata
+        run: |
+          set -euo pipefail
+          python research/study2_acs_slice.py verify \
+            --slice slice/acs_income_ca_2018.csv | tee slice/verification.json
+          python - <<'PY'
+          import json, pathlib
+          meta = json.loads(pathlib.Path("slice/verification.json").read_text())
+          assert meta["rows"] == 50000, meta["rows"]
+          assert meta["task"] == "ACSIncome"
+          assert (meta["survey_year"], meta["horizon"], meta["state"]) == (2018, "1-Year", "CA")
+          assert meta["sensitive_attribute"] == "SEX"
+          assert meta["sampling_seed"] == 20260822
+          assert meta["smoke"] is False
+          print("frozen slice verified:", meta["fingerprint"])
+          PY
+      - name: Upload the frozen slice
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-slice
+          path: slice
+          retention-days: 30
+
+  target-seed:
+    name: "target seed ${{ matrix.seed }}"
+    if: github.event_name == 'workflow_dispatch'
+    needs: prepare-slice
+    runs-on: ubuntu-latest
+    # 65 models per seed (one target + 64 matched shadows) at 60 epochs.
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [42, 43, 44]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[experimental]"
+      - name: Download the frozen slice
+        uses: actions/download-artifact@v4
+        with:
+          name: phase0-slice
+          path: slice
+      - name: Verify the slice before training on it
+        run: python research/study2_acs_slice.py verify --slice slice/acs_income_ca_2018.csv
+      - name: Run target seed ${{ matrix.seed }}
+        shell: bash
+        run: |
+          mkdir -p reports/study2_phase0/seeds
+          set +e
+          python research/study2_phase0_natural_leakage.py seed \
+            --slice slice/acs_income_ca_2018.csv \
+            --seed ${{ matrix.seed }} \
+            --permutation-reps "${{ github.event.inputs.permutation_reps || '1000' }}" \
+            --output-dir reports/study2_phase0/seeds \
+            2>&1 | tee reports/study2_phase0/seeds/seed_${{ matrix.seed }}.console.log
+          status=${PIPESTATUS[0]}
+          echo "exit_status=$status" \
+            >> reports/study2_phase0/seeds/seed_${{ matrix.seed }}.console.log
+          exit "$status"
+      # Per-example attack outputs are persisted with the seed result, so the
+      # raw design survives even if aggregation is re-run later.
+      - name: Upload seed ${{ matrix.seed }} outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-seed-${{ matrix.seed }}
+          path: reports/study2_phase0/seeds
+          if-no-files-found: warn
+          retention-days: 90
+
+  gate:
+    name: Aggregate all seeds and evaluate the continuation gate
+    # Aggregation runs only after every seed job has finished. `--expect-all`
+    # makes a missing seed an INCOMPLETE non-zero exit rather than a gate
+    # decision taken on a partial set.
+    needs: target-seed
+    if: always() && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "."
+      - name: Download every seed artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: phase0-seed-*
+          path: reports/study2_phase0/seeds
+          merge-multiple: true
+      - name: Aggregate and evaluate the gate
+        shell: bash
+        run: |
+          set +e
+          python research/study2_phase0_natural_leakage.py aggregate \
+            --input-dir reports/study2_phase0/seeds \
+            --output-dir reports/study2_phase0 \
+            --expect-all \
+            2>&1 | tee reports/study2_phase0/gate.console.log
+          status=${PIPESTATUS[0]}
+          echo "exit_status=$status" >> reports/study2_phase0/gate.console.log
+          exit "$status"
+      - name: Print the continuation gate
+        if: always()
+        shell: bash
+        run: |
+          verdict=$(grep -Eo '^CONTINUATION GATE: (PASS|FAIL|INCOMPLETE)$' \
+            reports/study2_phase0/gate.console.log | tail -n 1 | awk '{print $3}')
+          verdict=${verdict:-INCOMPLETE}
+          echo "$verdict"
+          {
+            echo "# Study 2 Phase 0 continuation gate: $verdict"
+            echo
+            if [ -f reports/study2_phase0/phase0_gate.md ]; then
+              cat reports/study2_phase0/phase0_gate.md
+            else
+              echo 'The gate report was not produced; see the console log artifact.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      # Results are uploaded as artifacts only. Nothing is committed back, no
+      # pull request is opened, and no downstream DP epsilon ladder workflow is
+      # triggered from here -- on either verdict. Continuation, if the gate
+      # passes, is a separate human decision and a separate manual dispatch.
+      - name: Upload the gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-gate-report
+          path: reports/study2_phase0
+          if-no-files-found: warn
+          retention-days: 90
