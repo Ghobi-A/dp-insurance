@@ -1,0 +1,726 @@
+{
+  "schema_version": 1,
+  "status": "exploratory_pilot",
+  "config": {
+    "dataset": "insurance",
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "strengths": [
+      1.0
+    ],
+    "epsilons": [
+      1.0,
+      2.0,
+      4.0,
+      8.0
+    ],
+    "stress_levels": [
+      0.5,
+      0.75
+    ],
+    "test_levels": [
+      0.0,
+      0.25
+    ],
+    "n_train": 1000,
+    "n_eval": 2000,
+    "dimensions": 8,
+    "stable_signal": 0.7,
+    "epochs": 15,
+    "batch_size": 128,
+    "learning_rate": 0.1,
+    "clip_norm": 1.0,
+    "delta": 1e-05,
+    "tau": 0.03,
+    "utility_floor": 0.7,
+    "privacy_cap": 8.0,
+    "generic_noise": 0.5
+  },
+  "preparation": [
+    {
+      "seed": 0,
+      "input_sha256": "388eff679557d08ac19f463d025de5e0b4adc482537c8456d19934d78621fd47",
+      "public_bounds": {
+        "age": 100.0,
+        "charges": 100000.0,
+        "bmi": 80.0,
+        "children": 10.0
+      },
+      "public_categories": {
+        "sex": [
+          "female",
+          "male"
+        ],
+        "region": [
+          "northeast",
+          "northwest",
+          "southeast",
+          "southwest"
+        ],
+        "smoker": [
+          "no",
+          "yes"
+        ]
+      },
+      "partition_sizes": [
+        802,
+        268,
+        268
+      ]
+    },
+    {
+      "seed": 1,
+      "input_sha256": "388eff679557d08ac19f463d025de5e0b4adc482537c8456d19934d78621fd47",
+      "public_bounds": {
+        "age": 100.0,
+        "charges": 100000.0,
+        "bmi": 80.0,
+        "children": 10.0
+      },
+      "public_categories": {
+        "sex": [
+          "female",
+          "male"
+        ],
+        "region": [
+          "northeast",
+          "northwest",
+          "southeast",
+          "southwest"
+        ],
+        "smoker": [
+          "no",
+          "yes"
+        ]
+      },
+      "partition_sizes": [
+        802,
+        268,
+        268
+      ]
+    },
+    {
+      "seed": 2,
+      "input_sha256": "388eff679557d08ac19f463d025de5e0b4adc482537c8456d19934d78621fd47",
+      "public_bounds": {
+        "age": 100.0,
+        "charges": 100000.0,
+        "bmi": 80.0,
+        "children": 10.0
+      },
+      "public_categories": {
+        "sex": [
+          "female",
+          "male"
+        ],
+        "region": [
+          "northeast",
+          "northwest",
+          "southeast",
+          "southwest"
+        ],
+        "smoker": [
+          "no",
+          "yes"
+        ]
+      },
+      "partition_sizes": [
+        802,
+        268,
+        268
+      ]
+    },
+    {
+      "seed": 3,
+      "input_sha256": "388eff679557d08ac19f463d025de5e0b4adc482537c8456d19934d78621fd47",
+      "public_bounds": {
+        "age": 100.0,
+        "charges": 100000.0,
+        "bmi": 80.0,
+        "children": 10.0
+      },
+      "public_categories": {
+        "sex": [
+          "female",
+          "male"
+        ],
+        "region": [
+          "northeast",
+          "northwest",
+          "southeast",
+          "southwest"
+        ],
+        "smoker": [
+          "no",
+          "yes"
+        ]
+      },
+      "partition_sizes": [
+        802,
+        268,
+        268
+      ]
+    },
+    {
+      "seed": 4,
+      "input_sha256": "388eff679557d08ac19f463d025de5e0b4adc482537c8456d19934d78621fd47",
+      "public_bounds": {
+        "age": 100.0,
+        "charges": 100000.0,
+        "bmi": 80.0,
+        "children": 10.0
+      },
+      "public_categories": {
+        "sex": [
+          "female",
+          "male"
+        ],
+        "region": [
+          "northeast",
+          "northwest",
+          "southeast",
+          "southwest"
+        ],
+        "smoker": [
+          "no",
+          "yes"
+        ]
+      },
+      "partition_sizes": [
+        802,
+        268,
+        268
+      ]
+    }
+  ],
+  "accounting": [
+    {
+      "seed": 0,
+      "strength": 1.0,
+      "condition": "ordinary",
+      "requested_epsilon": null,
+      "achieved_epsilon": null,
+      "delta": null,
+      "noise_multiplier": 0.0,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": null,
+      "secure_rng": false,
+      "accountant": null,
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "a84950f6fa636c1557bdc8a0009a6e186ed6b741e4cc5591b9f7dc1a19a95d22"
+    },
+    {
+      "seed": 0,
+      "strength": 1.0,
+      "condition": "clipped",
+      "requested_epsilon": null,
+      "achieved_epsilon": null,
+      "delta": null,
+      "noise_multiplier": 0.0,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.200133422281521,
+      "secure_rng": false,
+      "accountant": null,
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "a84950f6fa636c1557bdc8a0009a6e186ed6b741e4cc5591b9f7dc1a19a95d22"
+    },
+    {
+      "seed": 0,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 1.0,
+      "achieved_epsilon": 0.9916100658918756,
+      "delta": 1e-05,
+      "noise_multiplier": 6.171875,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.20071714476317545,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "a84950f6fa636c1557bdc8a0009a6e186ed6b741e4cc5591b9f7dc1a19a95d22"
+    },
+    {
+      "seed": 0,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 2.0,
+      "achieved_epsilon": 1.9979365212033011,
+      "delta": 1e-05,
+      "noise_multiplier": 3.37890625,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.20055036691127417,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "a84950f6fa636c1557bdc8a0009a6e186ed6b741e4cc5591b9f7dc1a19a95d22"
+    },
+    {
+      "seed": 0,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 4.0,
+      "achieved_epsilon": 3.9996493174243883,
+      "delta": 1e-05,
+      "noise_multiplier": 1.962890625,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.20030020013342228,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "a84950f6fa636c1557bdc8a0009a6e186ed6b741e4cc5591b9f7dc1a19a95d22"
+    },
+    {
+      "seed": 0,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 8.0,
+      "achieved_epsilon": 7.994493089569305,
+      "delta": 1e-05,
+      "noise_multiplier": 1.23779296875,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.20030020013342228,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "a84950f6fa636c1557bdc8a0009a6e186ed6b741e4cc5591b9f7dc1a19a95d22"
+    },
+    {
+      "seed": 1,
+      "strength": 1.0,
+      "condition": "ordinary",
+      "requested_epsilon": null,
+      "achieved_epsilon": null,
+      "delta": null,
+      "noise_multiplier": 0.0,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": null,
+      "secure_rng": false,
+      "accountant": null,
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "9826e421b420204893936025ee4d240f3f247604e2e02eee7a49fdb154e15af2"
+    },
+    {
+      "seed": 1,
+      "strength": 1.0,
+      "condition": "clipped",
+      "requested_epsilon": null,
+      "achieved_epsilon": null,
+      "delta": null,
+      "noise_multiplier": 0.0,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.20316666666666666,
+      "secure_rng": false,
+      "accountant": null,
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "9826e421b420204893936025ee4d240f3f247604e2e02eee7a49fdb154e15af2"
+    },
+    {
+      "seed": 1,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 1.0,
+      "achieved_epsilon": 0.9916100658918756,
+      "delta": 1e-05,
+      "noise_multiplier": 6.171875,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.20333333333333334,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "9826e421b420204893936025ee4d240f3f247604e2e02eee7a49fdb154e15af2"
+    },
+    {
+      "seed": 1,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 2.0,
+      "achieved_epsilon": 1.9979365212033011,
+      "delta": 1e-05,
+      "noise_multiplier": 3.37890625,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.20325,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "9826e421b420204893936025ee4d240f3f247604e2e02eee7a49fdb154e15af2"
+    },
+    {
+      "seed": 1,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 4.0,
+      "achieved_epsilon": 3.9996493174243883,
+      "delta": 1e-05,
+      "noise_multiplier": 1.962890625,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.20316666666666666,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "9826e421b420204893936025ee4d240f3f247604e2e02eee7a49fdb154e15af2"
+    },
+    {
+      "seed": 1,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 8.0,
+      "achieved_epsilon": 7.994493089569305,
+      "delta": 1e-05,
+      "noise_multiplier": 1.23779296875,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.20316666666666666,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "9826e421b420204893936025ee4d240f3f247604e2e02eee7a49fdb154e15af2"
+    },
+    {
+      "seed": 2,
+      "strength": 1.0,
+      "condition": "ordinary",
+      "requested_epsilon": null,
+      "achieved_epsilon": null,
+      "delta": null,
+      "noise_multiplier": 0.0,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": null,
+      "secure_rng": false,
+      "accountant": null,
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "3513df31e8fd4818f494e944b93e1b9554fa356c36e12b69d828d6e917997e93"
+    },
+    {
+      "seed": 2,
+      "strength": 1.0,
+      "condition": "clipped",
+      "requested_epsilon": null,
+      "achieved_epsilon": null,
+      "delta": null,
+      "noise_multiplier": 0.0,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.19772221270765541,
+      "secure_rng": false,
+      "accountant": null,
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "3513df31e8fd4818f494e944b93e1b9554fa356c36e12b69d828d6e917997e93"
+    },
+    {
+      "seed": 2,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 1.0,
+      "achieved_epsilon": 0.9916100658918756,
+      "delta": 1e-05,
+      "noise_multiplier": 6.171875,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.19695153279671176,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "3513df31e8fd4818f494e944b93e1b9554fa356c36e12b69d828d6e917997e93"
+    },
+    {
+      "seed": 2,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 2.0,
+      "achieved_epsilon": 1.9979365212033011,
+      "delta": 1e-05,
+      "noise_multiplier": 3.37890625,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.19720842610035966,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "3513df31e8fd4818f494e944b93e1b9554fa356c36e12b69d828d6e917997e93"
+    },
+    {
+      "seed": 2,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 4.0,
+      "achieved_epsilon": 3.9996493174243883,
+      "delta": 1e-05,
+      "noise_multiplier": 1.962890625,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.19737968830279157,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "3513df31e8fd4818f494e944b93e1b9554fa356c36e12b69d828d6e917997e93"
+    },
+    {
+      "seed": 2,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 8.0,
+      "achieved_epsilon": 7.994493089569305,
+      "delta": 1e-05,
+      "noise_multiplier": 1.23779296875,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.19746531940400752,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "3513df31e8fd4818f494e944b93e1b9554fa356c36e12b69d828d6e917997e93"
+    },
+    {
+      "seed": 3,
+      "strength": 1.0,
+      "condition": "ordinary",
+      "requested_epsilon": null,
+      "achieved_epsilon": null,
+      "delta": null,
+      "noise_multiplier": 0.0,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": null,
+      "secure_rng": false,
+      "accountant": null,
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "f80f894ddc508a0b086e1989ee19d9fa84988340335f40f16a335fef1f8780ce"
+    },
+    {
+      "seed": 3,
+      "strength": 1.0,
+      "condition": "clipped",
+      "requested_epsilon": null,
+      "achieved_epsilon": null,
+      "delta": null,
+      "noise_multiplier": 0.0,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.21951829319109925,
+      "secure_rng": false,
+      "accountant": null,
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "f80f894ddc508a0b086e1989ee19d9fa84988340335f40f16a335fef1f8780ce"
+    },
+    {
+      "seed": 3,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 1.0,
+      "achieved_epsilon": 0.9916100658918756,
+      "delta": 1e-05,
+      "noise_multiplier": 6.171875,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.21926827235602966,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "f80f894ddc508a0b086e1989ee19d9fa84988340335f40f16a335fef1f8780ce"
+    },
+    {
+      "seed": 3,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 2.0,
+      "achieved_epsilon": 1.9979365212033011,
+      "delta": 1e-05,
+      "noise_multiplier": 3.37890625,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.21943495291274273,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "f80f894ddc508a0b086e1989ee19d9fa84988340335f40f16a335fef1f8780ce"
+    },
+    {
+      "seed": 3,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 4.0,
+      "achieved_epsilon": 3.9996493174243883,
+      "delta": 1e-05,
+      "noise_multiplier": 1.962890625,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.21951829319109925,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "f80f894ddc508a0b086e1989ee19d9fa84988340335f40f16a335fef1f8780ce"
+    },
+    {
+      "seed": 3,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 8.0,
+      "achieved_epsilon": 7.994493089569305,
+      "delta": 1e-05,
+      "noise_multiplier": 1.23779296875,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.21951829319109925,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "f80f894ddc508a0b086e1989ee19d9fa84988340335f40f16a335fef1f8780ce"
+    },
+    {
+      "seed": 4,
+      "strength": 1.0,
+      "condition": "ordinary",
+      "requested_epsilon": null,
+      "achieved_epsilon": null,
+      "delta": null,
+      "noise_multiplier": 0.0,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": null,
+      "secure_rng": false,
+      "accountant": null,
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "ff2e8c4214c23b9639fcfdf1d1eca5f3a7e58c5f670ada7c09ab7a064bad8b67"
+    },
+    {
+      "seed": 4,
+      "strength": 1.0,
+      "condition": "clipped",
+      "requested_epsilon": null,
+      "achieved_epsilon": null,
+      "delta": null,
+      "noise_multiplier": 0.0,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.17837171052631579,
+      "secure_rng": false,
+      "accountant": null,
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "ff2e8c4214c23b9639fcfdf1d1eca5f3a7e58c5f670ada7c09ab7a064bad8b67"
+    },
+    {
+      "seed": 4,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 1.0,
+      "achieved_epsilon": 0.9916100658918756,
+      "delta": 1e-05,
+      "noise_multiplier": 6.171875,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.17911184210526315,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "ff2e8c4214c23b9639fcfdf1d1eca5f3a7e58c5f670ada7c09ab7a064bad8b67"
+    },
+    {
+      "seed": 4,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 2.0,
+      "achieved_epsilon": 1.9979365212033011,
+      "delta": 1e-05,
+      "noise_multiplier": 3.37890625,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.17861842105263157,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "ff2e8c4214c23b9639fcfdf1d1eca5f3a7e58c5f670ada7c09ab7a064bad8b67"
+    },
+    {
+      "seed": 4,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 4.0,
+      "achieved_epsilon": 3.9996493174243883,
+      "delta": 1e-05,
+      "noise_multiplier": 1.962890625,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.17837171052631579,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "ff2e8c4214c23b9639fcfdf1d1eca5f3a7e58c5f670ada7c09ab7a064bad8b67"
+    },
+    {
+      "seed": 4,
+      "strength": 1.0,
+      "condition": "dpsgd",
+      "requested_epsilon": 8.0,
+      "achieved_epsilon": 7.994493089569305,
+      "delta": 1e-05,
+      "noise_multiplier": 1.23779296875,
+      "sample_rate": 0.14285714285714285,
+      "steps": 105,
+      "empty_steps": 0,
+      "clip_rate": 0.17837171052631579,
+      "secure_rng": false,
+      "accountant": "rdp",
+      "privacy_scope": "per-model prepared-record add/remove accounting",
+      "training_sha256": "ff2e8c4214c23b9639fcfdf1d1eca5f3a7e58c5f670ada7c09ab7a064bad8b67"
+    }
+  ],
+  "versions": {
+    "torch": "2.14.0",
+    "opacus": "1.6.0",
+    "numpy": "2.3.5",
+    "pandas": "2.2.3",
+    "scikit-learn": "1.8.0"
+  },
+  "python": "3.12.14",
+  "study_source_sha256": "38c9a70ce015fb4a9c300b343734f548b611698c77b8e8b3a275f8aa5a04b7f6",
+  "privacy_release": "public/synthetic benchmark; not composed private search/release",
+  "inference": "descriptive seed intervals conditional on evaluation cohorts; no confirmatory test",
+  "git_commit": "c69fe18e83ed4e845a67e118e4c04c1b6f22cab8",
+  "git_dirty": false
+}

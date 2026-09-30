@@ -1,0 +1,49 @@
+name: Proxy Shift Study
+
+on:
+  pull_request:
+    paths:
+      - src/dp/proxy_shift.py
+      - src/dp/proxy_shift_components.py
+      - tests/test_proxy_shift.py
+      - research/proxy_shift/**
+      - .github/workflows/proxy-shift-study.yml
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Exploratory profile
+        type: choice
+        options: [smoke, pilot, insurance]
+        default: smoke
+
+permissions:
+  contents: read
+
+jobs:
+  study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install research dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e '.[experimental,dev]'
+      - name: Validate study invariants
+        run: |
+          ruff check src/dp/proxy_shift.py src/dp/proxy_shift_components.py tests/test_proxy_shift.py
+          pytest tests/test_proxy_shift.py -q
+      - name: Execute exploratory profile
+        env:
+          PROFILE: ${{ inputs.profile || 'smoke' }}
+        run: |
+          case "$PROFILE" in smoke|pilot|insurance) ;; *) exit 1 ;; esac
+          python -m dp.proxy_shift --config "research/proxy_shift/$PROFILE.json" \
+            --output-dir "reports/proxy_shift/$PROFILE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proxy-shift-${{ inputs.profile || 'smoke' }}
+          path: reports/proxy_shift/
