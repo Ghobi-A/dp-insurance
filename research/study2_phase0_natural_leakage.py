@@ -127,6 +127,9 @@ def frozen_config(
     shadows: int = NUM_SHADOWS,
     permutation_reps: int = PERMUTATION_REPS,
     smoke: bool = False,
+    *,
+    batch_size: int = BATCH_SIZE,
+    train_size: int = TRAIN_SIZE,
 ) -> dict[str, object]:
     """The training and attack recipe, plus any deviation from the frozen one."""
     config = {
@@ -136,10 +139,10 @@ def frozen_config(
         "architecture": "Linear(d,128)->ReLU->Linear(128,128)->ReLU->Linear(128,64)->ReLU->Linear(64,1)",
         "optimiser": "Adam",
         "learning_rate": LEARNING_RATE,
-        "batch_size": BATCH_SIZE,
+        "batch_size": batch_size,
         "epochs": epochs,
         "regularisation": "none (no dropout, no weight decay, no early stopping)",
-        "train_size": TRAIN_SIZE,
+        "train_size": train_size,
         "num_shadows": shadows,
         "target_seeds": list(TARGET_SEEDS),
         "sampling_seed": SAMPLING_SEED,
@@ -156,6 +159,8 @@ def frozen_config(
             ("epochs", epochs, EPOCHS),
             ("num_shadows", shadows, NUM_SHADOWS),
             ("permutation_reps", permutation_reps, PERMUTATION_REPS),
+            ("batch_size", batch_size, BATCH_SIZE),
+            ("train_size", train_size, TRAIN_SIZE),
         )
         if value != frozen
     }
@@ -165,7 +170,7 @@ def frozen_config(
 
 def is_preregistered(config: dict[str, object]) -> bool:
     """True only for a run that may be read as a Phase 0 result."""
-    return not config.get("smoke") and not config.get("deviates_from_frozen")
+    return config == frozen_config()
 
 
 # --------------------------------------------------------------------------- #
@@ -280,6 +285,11 @@ def evaluate_gate(
     three, so an incomplete set is an ``INCOMPLETE`` verdict rather than a gate
     decision taken on what happened to finish.
     """
+    seeds = [int(result["seed"]) for result in seed_results]
+    if len(seeds) != len(set(seeds)):
+        raise ValueError("duplicate target seeds cannot be aggregated")
+    if set(seeds) - set(expected_seeds):
+        raise ValueError("unexpected target seeds cannot be aggregated")
     by_seed = {int(result["seed"]): result for result in seed_results}
     missing = [seed for seed in expected_seeds if seed not in by_seed]
     aucs = [float(by_seed[seed][PRIMARY_ATTACK]["auc"]) for seed in expected_seeds if seed in by_seed]
@@ -707,8 +717,13 @@ def run_seed_command(args: argparse.Namespace) -> int:
     features, labels, groups, slice_meta = _prepare_arrays(args.slice_path, args.smoke)
     # The frozen slice is 50,000 rows, so this is exactly TRAIN_SIZE there; the
     # min() only bites on a smaller smoke slice, which is never a Phase 0 result.
-    train_size = args.train_size or min(TRAIN_SIZE, len(labels) // 2)
-    config = frozen_config(args.epochs, args.shadows, args.permutation_reps, args.smoke)
+    train_size = (
+        args.train_size if args.train_size is not None else min(TRAIN_SIZE, len(labels) // 2)
+    )
+    config = frozen_config(
+        args.epochs, args.shadows, args.permutation_reps, args.smoke,
+        batch_size=args.batch_size, train_size=train_size,
+    )
     result = run_seed(
         features,
         labels,
@@ -741,6 +756,16 @@ def aggregate_command(args: argparse.Namespace) -> int:
     results.sort(key=lambda result: int(result["seed"]))
     if not results:
         raise SystemExit(f"no seed_*.json results under {args.input_dir}")
+
+    for result in results:
+        config = result["config"]
+        if config != results[0]["config"]:
+            raise SystemExit("seed results have different executed configurations")
+        for key in ("epochs", "batch_size", "num_shadows", "train_size", "permutation_reps", "smoke"):
+            if result.get(key) != config[key]:
+                raise SystemExit(f"seed result disagrees with its configuration: {key}")
+        if result.get("preregistered") != is_preregistered(config):
+            raise SystemExit("seed result has an incorrect preregistered stamp")
 
     fingerprints = {str(result["slice"]["fingerprint"]) for result in results}
     if len(fingerprints) != 1:

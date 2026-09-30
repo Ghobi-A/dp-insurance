@@ -478,16 +478,16 @@ def test_subgroup_unsupported_when_direction_unstable():
         _seed_result(44, signed=0.20, signed_holm=0.001),
     ]
     verdict, basis = ladder.classify_subgroup(results)
-    assert verdict == ladder.SUBGROUP_UNSUPPORTED
-    assert "direction is not stable" in basis
+    assert verdict == ladder.SUBGROUP_INCONCLUSIVE
+    assert "not equal leakage" in basis
 
 
 def test_subgroup_unsupported_when_within_resolution():
     tiny = 1 / 256  # below the 1/128 one-person resolution
     results = [_seed_result(seed, signed=tiny, signed_holm=0.001) for seed in (42, 43, 44)]
     verdict, basis = ladder.classify_subgroup(results)
-    assert verdict == ladder.SUBGROUP_UNSUPPORTED
-    assert "resolution" in basis
+    assert verdict == ladder.SUBGROUP_INCONCLUSIVE
+    assert "valid disparity test" in basis
 
 
 def test_subgroup_unsupported_when_driven_by_one_seed():
@@ -497,24 +497,23 @@ def test_subgroup_unsupported_when_driven_by_one_seed():
         _seed_result(44, signed=0.0, signed_holm=0.001),
     ]
     verdict, basis = ladder.classify_subgroup(results)
-    assert verdict == ladder.SUBGROUP_UNSUPPORTED
-    assert "single seed" in basis or "resolution" in basis
+    assert verdict == ladder.SUBGROUP_INCONCLUSIVE
+    assert "valid disparity test" in basis
 
 
-def test_subgroup_supported_when_all_criteria_met():
+def test_small_association_pvalues_do_not_validate_equal_leakage_null():
     results = [_seed_result(seed, signed=0.25, signed_holm=0.001) for seed in (42, 43, 44)]
     verdict, basis = ladder.classify_subgroup(results)
-    assert verdict == ladder.SUBGROUP_SUPPORTED
-    assert "male" in basis
+    assert verdict == ladder.SUBGROUP_INCONCLUSIVE
+    assert "not equal leakage" in basis
 
 
-def test_subgroup_inconclusive_only_when_an_attack_genuinely_failed():
-    """Under Amendment 1 this can no longer arise from the memorisation gate."""
+def test_subgroup_inconclusive_for_failed_or_completed_attacks_without_valid_null():
     results = _point("eps2", 2.0, gate=False, status="failed")["seed_results"]
     assert ladder.classify_subgroup(results)[0] == ladder.SUBGROUP_INCONCLUSIVE
-    # A low-memorisation point that *did* complete is assessed normally.
+    # Completed attacks retain descriptive contrasts but cannot decide disparity.
     completed = _point("eps2", 2.0, gate=False)["seed_results"]
-    assert ladder.classify_subgroup(completed)[0] != ladder.SUBGROUP_INCONCLUSIVE
+    assert ladder.classify_subgroup(completed)[0] == ladder.SUBGROUP_INCONCLUSIVE
 
 
 # --------------------------------------------------------------------------- #

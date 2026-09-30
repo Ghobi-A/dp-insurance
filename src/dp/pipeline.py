@@ -114,6 +114,10 @@ def apply_bounded_feature_noise(
     the release of *all* numeric columns together — no extra composition
     accounting is needed.
 
+    This protects bounded numeric fields conditional on all unchanged fields,
+    fixed row count/order, and fixed public bounds. Categorical columns pass
+    through unchanged, so this is not a full-record private release.
+
     This replaces the earlier approach of using the maximum column range as a
     shared sensitivity, which both under-accounted the joint release and let
     wide columns (e.g. ``charges``) dictate the noise scale for narrow ones

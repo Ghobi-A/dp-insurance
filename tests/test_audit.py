@@ -27,6 +27,40 @@ from dp.mechanisms import add_laplace_noise
 
 # --- binomial one-run estimator -------------------------------------------
 
+
+@pytest.mark.parametrize("canaries,expected", [(100, 0.699), (1000, 0.673)])
+def test_approximate_dp_matches_published_appendix_d_examples(canaries, expected):
+    result = epsilon_lower_bound_binomial(
+        75, 100, delta=1e-4, num_canaries=canaries,
+    )
+    assert result.epsilon_lower_bound == pytest.approx(expected, abs=0.001)
+
+
+def test_positive_delta_requires_total_candidates_before_abstention():
+    with pytest.raises(ValueError, match="num_canaries is required"):
+        epsilon_lower_bound_binomial(75, 100, delta=1e-4)
+    with pytest.raises(ValueError, match="num_canaries must"):
+        epsilon_lower_bound_binomial(75, 100, delta=1e-4, num_canaries=99)
+
+
+def test_approximate_dp_correction_weakens_with_delta_and_abstention_pool():
+    pure = epsilon_lower_bound_binomial(80, 100).epsilon_lower_bound
+    small = epsilon_lower_bound_binomial(80, 100, delta=1e-5, num_canaries=100)
+    large = epsilon_lower_bound_binomial(80, 100, delta=1e-3, num_canaries=1000)
+    assert pure > small.epsilon_lower_bound > large.epsilon_lower_bound
+    assert epsilon_lower_bound_binomial(
+        100, 100, delta=0.5, num_canaries=100,
+    ).epsilon_lower_bound == 0
+
+
+def test_score_auditor_passes_full_candidate_count_with_abstention():
+    included = np.tile([0, 1], 100)
+    result = audit_membership_scores(
+        included.astype(float), included, delta=1e-4, guess_fraction=0.5,
+    )
+    reference = epsilon_lower_bound_binomial(100, 100, delta=1e-4, num_canaries=200)
+    assert result.epsilon_lower_bound == pytest.approx(reference.epsilon_lower_bound)
+
 def test_binomial_perfect_privacy_yields_zero():
     # Exactly chance-level guessing (half correct) rules out no epsilon.
     result = epsilon_lower_bound_binomial(num_correct=500, num_guesses=1000)

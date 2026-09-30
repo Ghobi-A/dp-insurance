@@ -70,21 +70,27 @@ def epsilon_lower_bound_binomial(
     num_guesses: int,
     delta: float = 0.0,
     confidence: float = 0.95,
+    *,
+    num_canaries: int | None = None,
 ) -> AuditResult:
     """One-run ε lower bound from correct-guess counts (Steinke et al. 2023).
 
-    The auditor inserts ``num_guesses`` independent canaries, each randomly
-    included or excluded, and after training guesses each canary's membership.
+    The auditor inserts ``num_canaries`` independent candidates, each randomly
+    included or excluded, and after training commits at most ``num_guesses``
+    membership guesses. The guessing budget must be fixed independently of
+    the realised inclusion labels.
     Under (ε, δ)-DP the number of correct guesses ``v`` satisfies
 
         P[correct ≥ v] ≤ P[Binomial(r, e^ε/(e^ε+1)) ≥ v] + O(δ)
 
-    (Theorem 5.2).  We ignore the O(δ) term for δ = 0 (the pure-DP case this
-    project audits) and, for δ > 0, apply the standard conservative correction
-    of crediting the attacker with up to ``r · δ`` "free" correct guesses,
-    which never over-states the bound.  The reported ε_lb is the largest ε
-    whose upper-tail p-value is still ≤ β = 1 − ``confidence``; since that tail
-    is monotincreasing in ε, the root is unique and found by bisection.
+    Corollary 5.4 supplies the approximate-DP correction
+    ``2*m*delta*max_i((f(v-i)-f(v))/i)``, where ``m`` counts all candidates
+    before abstention and ``f`` is the binomial upper tail. This implements
+    that correction using the cumulative probability mass below ``v`` as in
+    Appendix D (https://arxiv.org/abs/2305.08846).
+    The reported ε_lb is the largest ε
+    whose upper-tail bound is still ≤ β = 1 − ``confidence``;
+    the crossing is found by bracketed numerical inversion.
 
     Args:
         num_correct: Number of correct membership guesses (v), 0 ≤ v ≤ r.
@@ -92,6 +98,8 @@ def epsilon_lower_bound_binomial(
             (T_i = 0) should be excluded from this count.
         delta: The δ of the (ε, δ)-DP claim being audited. 0 for pure DP.
         confidence: Confidence level 1 − β for the lower bound.
+        num_canaries: Total independent inclusion bits before abstention (m).
+            Required for positive delta; must be at least num_guesses.
 
     Returns:
         An :class:`AuditResult`. ``epsilon_lower_bound`` is 0.0 when the data
@@ -100,25 +108,33 @@ def epsilon_lower_bound_binomial(
     Raises:
         ValueError: If inputs are out of range.
     """
-    if num_guesses <= 0:
+    if not isinstance(num_guesses, (int, np.integer)) or num_guesses <= 0:
         raise ValueError("num_guesses must be positive")
-    if not (0 <= num_correct <= num_guesses):
+    if not isinstance(num_correct, (int, np.integer)) or not (0 <= num_correct <= num_guesses):
         raise ValueError("num_correct must satisfy 0 <= num_correct <= num_guesses")
     if not (0 < confidence < 1):
         raise ValueError("confidence must be in (0, 1)")
     if not (0 <= delta < 1):
         raise ValueError("delta must be in [0, 1)")
+    if num_canaries is None:
+        if delta > 0:
+            raise ValueError("num_canaries is required for positive delta (before abstention)")
+        num_canaries = num_guesses
+    if not isinstance(num_canaries, (int, np.integer)) or num_canaries < num_guesses:
+        raise ValueError("num_canaries must be an integer >= num_guesses")
 
     beta = 1.0 - confidence
-    # Conservative δ correction: discount correct guesses the attacker could
-    # have made "for free" on the δ-failure event (Steinke et al., §5).
-    effective_correct = num_correct - delta * num_guesses
-
     def tail_pvalue(epsilon: float) -> float:
-        p = np.exp(epsilon) / (np.exp(epsilon) + 1.0)
-        # P[Binomial(r, p) >= v] = sf(v - 1); use ceil for the discounted count.
-        v = int(np.ceil(effective_correct))
-        return float(stats.binom.sf(v - 1, num_guesses, p))
+        p = 1.0 / (1.0 + np.exp(-epsilon))
+        tail = float(stats.binom.sf(num_correct - 1, num_guesses, p))
+        if delta == 0 or num_correct == 0:
+            return tail
+        # For i > v, f(v-i)=1 and the denominator increases, so the
+        # maximum over 1..m is attained in 1..v (v <= r <= m).
+        offsets = np.arange(1, num_correct + 1)
+        mass = np.cumsum(stats.binom.pmf(num_correct - offsets, num_guesses, p))
+        correction = 2 * num_canaries * delta * float(np.max(mass / offsets))
+        return min(1.0, tail + correction)
 
     # If even ε → 0 (p = 0.5) is not surprising, nothing can be ruled out.
     if tail_pvalue(0.0) > beta:
@@ -138,7 +154,10 @@ def epsilon_lower_bound_binomial(
         num_guesses=num_guesses,
         num_correct=num_correct,
         method="binomial-one-run",
-        details={"delta": delta, "accuracy": num_correct / num_guesses},
+        details={
+            "delta": delta, "accuracy": num_correct / num_guesses,
+            "num_canaries": int(num_canaries), "tail_bound": "Corollary 5.4",
+        },
     )
 
 
@@ -292,6 +311,7 @@ def audit_membership_scores(
     result = epsilon_lower_bound_binomial(
         num_correct=correct,
         num_guesses=2 * k,
+        num_canaries=m,
         delta=delta,
         confidence=confidence,
     )
@@ -359,6 +379,7 @@ def audit_scalar_mechanism(
     return epsilon_lower_bound_binomial(
         num_correct=correct,
         num_guesses=num_guesses,
+        num_canaries=num_guesses,
         delta=delta,
         confidence=confidence,
     )

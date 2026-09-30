@@ -367,18 +367,18 @@ def test_subgroup_disparity_not_claimed_from_aggregate_signal():
     subgroup_verdict, basis = apc.assess_subgroup_disparity(results)
 
     assert verdict == apc.DETECTS
-    assert subgroup_verdict == apc.SUBGROUP_UNSUPPORTED
+    assert subgroup_verdict == apc.SUBGROUP_INCONCLUSIVE
     assert basis
 
 
-def test_subgroup_disparity_supported_when_stable_and_significant():
+def test_no_association_pvalues_cannot_support_disparity_even_when_small():
     control = apc.CONTROLS[1]
     results = [
         _seed_result(control, seed, auc=0.80, ci_low=0.20, signed=0.25, signed_p=0.001)
         for seed in (42, 43, 44)
     ]
     verdict, _ = apc.assess_subgroup_disparity(results)
-    assert verdict == apc.SUBGROUP_SUPPORTED
+    assert verdict == apc.SUBGROUP_INCONCLUSIVE
 
 
 def test_subgroup_disparity_inconclusive_without_completed_attacks():
