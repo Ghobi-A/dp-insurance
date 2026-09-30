@@ -1,0 +1,29 @@
+{
+  "cohort": "ACS CA source validation",
+  "seed": 10,
+  "clip_norm": 1,
+  "epsilon": 2,
+  "additional_diagnostic_fits": 2,
+  "influence_marginal": {
+    "reference_auc": 0.863987784246405,
+    "auc": 0.8369563865253521,
+    "gap": 0.027031397721052897,
+    "gap_se": 0.0043475478090866364,
+    "auc_se": 0.009184431016760971,
+    "clusters": 1111,
+    "gap_upper": 0.03418845067904056,
+    "auc_lower": 0.8218367231973133,
+    "bounds_supported": true,
+    "alpha": 0.05,
+    "family": 1,
+    "method": "paired cluster influence sandwich; asymptotic Bonferroni bounds"
+  },
+  "bootstrap_marginal": {
+    "replicates_requested": 999,
+    "replicates_valid": 999,
+    "marginal_gap_upper": 0.03436298705164633,
+    "marginal_auc_lower": 0.8205180674170777,
+    "method": "paired household percentile bootstrap; marginal/asymptotic sensitivity only"
+  },
+  "scope": "one predetermined cell; marginal bounds only; no simultaneous coverage claim"
+}

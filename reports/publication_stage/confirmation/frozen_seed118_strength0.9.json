@@ -1,0 +1,98 @@
+[
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 1.0,
+    "rule": "source_only",
+    "uncertainty_bounds": false,
+    "selected_epsilon": 2.0
+  },
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 1.0,
+    "rule": "source_only",
+    "uncertainty_bounds": true,
+    "selected_epsilon": 2.0
+  },
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 1.0,
+    "rule": "proxy_stress",
+    "uncertainty_bounds": false,
+    "selected_epsilon": 2.0
+  },
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 1.0,
+    "rule": "proxy_stress",
+    "uncertainty_bounds": true,
+    "selected_epsilon": 2.0
+  },
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 1.0,
+    "rule": "generic_shift",
+    "uncertainty_bounds": false,
+    "selected_epsilon": 2.0
+  },
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 1.0,
+    "rule": "generic_shift",
+    "uncertainty_bounds": true,
+    "selected_epsilon": 2.0
+  },
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 5.0,
+    "rule": "source_only",
+    "uncertainty_bounds": false,
+    "selected_epsilon": 2.0
+  },
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 5.0,
+    "rule": "source_only",
+    "uncertainty_bounds": true,
+    "selected_epsilon": 2.0
+  },
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 5.0,
+    "rule": "proxy_stress",
+    "uncertainty_bounds": false,
+    "selected_epsilon": 2.0
+  },
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 5.0,
+    "rule": "proxy_stress",
+    "uncertainty_bounds": true,
+    "selected_epsilon": 2.0
+  },
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 5.0,
+    "rule": "generic_shift",
+    "uncertainty_bounds": false,
+    "selected_epsilon": 2.0
+  },
+  {
+    "seed": 118,
+    "strength": 0.9,
+    "clip_norm": 5.0,
+    "rule": "generic_shift",
+    "uncertainty_bounds": true,
+    "selected_epsilon": 2.0
+  }
+]

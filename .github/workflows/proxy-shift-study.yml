@@ -5,6 +5,11 @@ on:
     paths:
       - src/dp/proxy_shift.py
       - src/dp/proxy_shift_components.py
+      - src/dp/publication_study.py
+      - src/dp/acs_publication.py
+      - src/dp/auc_uncertainty.py
+      - src/dp/publication_diagnostics.py
+      - tests/test_publication_study.py
       - tests/test_proxy_shift.py
       - research/proxy_shift/**
       - .github/workflows/proxy-shift-study.yml
@@ -34,8 +39,12 @@ jobs:
           pip install -e '.[experimental,dev]'
       - name: Validate study invariants
         run: |
-          ruff check src/dp/proxy_shift.py src/dp/proxy_shift_components.py tests/test_proxy_shift.py
-          pytest tests/test_proxy_shift.py -q
+          ruff check src/dp/proxy_shift.py src/dp/proxy_shift_components.py src/dp/publication_study.py src/dp/acs_publication.py src/dp/auc_uncertainty.py src/dp/publication_diagnostics.py tests/test_proxy_shift.py tests/test_publication_study.py
+          pytest tests/test_proxy_shift.py tests/test_publication_study.py -q
+      - name: Publication-stage synthetic smoke
+        run: |
+          python -m dp.publication_study --config research/proxy_shift/publication_smoke.json \
+            --output-dir reports/publication_stage/smoke
       - name: Execute exploratory profile
         env:
           PROFILE: ${{ inputs.profile || 'smoke' }}
@@ -47,3 +56,7 @@ jobs:
         with:
           name: proxy-shift-${{ inputs.profile || 'smoke' }}
           path: reports/proxy_shift/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: publication-stage-smoke
+          path: reports/publication_stage/

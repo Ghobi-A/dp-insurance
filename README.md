@@ -17,6 +17,14 @@ manuscript, not the current benchmark or a submission-ready paper. See
 [`docs/PUBLICATION_STATUS.md`](docs/PUBLICATION_STATUS.md) for the corrected
 privacy boundary, completed ladder result, and remaining research requirements.
 
+**30 September publication stage:** the [plan](docs/PUBLICATION_PLAN.md) is
+implemented with clipping sensitivity, household-aware ACS preparation,
+uncertainty-aware recommendations and fresh-seed confirmation. The
+[findings](reports/publication_stage/FINDINGS.md) report 322 new model fits,
+including the executed five-state ACS pilot and 20-seed synthetic primary
+comparison. An [editable manuscript](paper/proxy_shift_manuscript.md) records
+the supported benchmark claim and remaining submission requirements.
+
 The reported Opacus budget covers DP-SGD on **prepared feature/label records**.
 Scaling, categorical vocabularies, and the `high_cost` training-median target
 are learned without privacy accounting. Train-only preprocessing prevents

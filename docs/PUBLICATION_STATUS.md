@@ -2,8 +2,10 @@
 
 The historical PDF in `paper/` is superseded. Its proxy-heavy smoker task and
 broad privacy/utility conclusions do not describe the corrected benchmark.
-There is no tracked editable manuscript source. This repository is not yet a
-submission-ready paper, and these corrections do not establish novelty.
+The new editable draft is `paper/proxy_shift_manuscript.md`; it is distinct
+from the historical PDF. This repository is not yet a submission-ready paper,
+and correctness improvements do not establish novelty. The executed next-stage
+evidence and remaining requirements are summarized in the update below.
 
 ## Privacy boundary
 
@@ -95,3 +97,14 @@ to finite points, so it does not isolate a noise-only transition.
    and DP utility literature before claiming a novel result. A benchmark or
    power-limited negative result may be useful, but novelty is not demonstrated
    by code completeness or by attaching a new title.
+# Publication-stage update, 30 September 2026
+
+The [next-stage plan](PUBLICATION_PLAN.md) has been implemented and executed:
+322 new fits, a five-state ACS external pilot, paired uncertainty/calibration,
+and a 20-fresh-seed prospective synthetic contrast. See the
+[findings](../reports/publication_stage/FINDINGS.md) and
+[editable manuscript](../paper/proxy_shift_manuscript.md). The supported claim
+is configuration-sensitive utility auditing. Proxy stress did not improve
+choices in confirmation; no new DP mechanism or general robustness claim is
+established. Independent external replication, representation/baseline
+sensitivity and scholarly review remain before submission.
