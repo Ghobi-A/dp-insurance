@@ -294,6 +294,75 @@ def test_smoke_and_deviating_runs_are_never_presented_as_phase_0_results():
     assert "Not a Phase 0 result" in phase0.render_markdown(payload)
 
 
+@pytest.mark.parametrize("key,value", [("batch_size", 32), ("train_size", 500)])
+def test_executed_batch_and_train_size_are_recorded_and_not_preregistered(key, value):
+    config = phase0.frozen_config(**{key: value})
+    assert config[key] == value
+    assert config["deviates_from_frozen"][key] == value
+    assert not phase0.is_preregistered(config)
+    # A stale or forged empty deviation list cannot bypass full comparison.
+    config["deviates_from_frozen"] = {}
+    assert not phase0.is_preregistered(config)
+
+
+@pytest.mark.parametrize("key", ["learning_rate", "primary_attack", "cohort_per_cell"])
+def test_preregistered_stamp_checks_entire_design(key):
+    config = phase0.frozen_config()
+    config[key] = "changed"
+    assert not phase0.is_preregistered(config)
+
+
+@pytest.mark.parametrize("seeds,match", [([42, 42, 43, 44], "duplicate"), ([42, 43, 44, 45], "unexpected")])
+def test_gate_rejects_duplicate_and_unexpected_seeds(seeds, match):
+    with pytest.raises(ValueError, match=match):
+        phase0.evaluate_gate([_seed_result(seed, 0.7, 0.001) for seed in seeds])
+
+
+@pytest.mark.parametrize("fault", ["mixed", "mismatch", "stamp"])
+def test_aggregate_validates_executed_design_and_preregistered_stamp(tmp_path, fault):
+    inputs = tmp_path / "in"
+    inputs.mkdir()
+    for seed in phase0.TARGET_SEEDS:
+        result = _seed_result(seed, 0.7, 0.001)
+        config = phase0.frozen_config()
+        if fault == "mixed" and seed == 44:
+            config = phase0.frozen_config(batch_size=32)
+        result["config"] = config
+        result["preregistered"] = phase0.is_preregistered(config)
+        result["slice"] = {"fingerprint": "0" * 64}
+        for key in ("epochs", "batch_size", "num_shadows", "train_size", "permutation_reps", "smoke"):
+            result[key] = config[key]
+        if seed == 44 and fault == "mismatch":
+            result["train_size"] = 100
+        if seed == 44 and fault == "stamp":
+            result["preregistered"] = False
+        (inputs / f"seed_{seed}.json").write_text(json.dumps(result))
+    with pytest.raises(SystemExit):
+        phase0.main(["aggregate", "--input-dir", str(inputs), "--output-dir", str(tmp_path / "out")])
+
+
+def test_seed_command_records_realised_cli_parameters_without_training(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        phase0, "_prepare_arrays",
+        lambda *_: (np.zeros((1000, 2)), np.zeros(1000), np.full(1000, "male"), {}),
+    )
+    executed = {}
+
+    def fake_run(*_, **kwargs):
+        executed.update(kwargs)
+        return {"seed": kwargs["seed"]}
+
+    monkeypatch.setattr(phase0, "run_seed", fake_run)
+    assert phase0.main([
+        "seed", "--slice", "unused.csv", "--seed", "42", "--batch-size", "32",
+        "--train-size", "100", "--output-dir", str(tmp_path),
+    ]) == 0
+    stored = json.loads((tmp_path / "seed_42.json").read_text())
+    assert stored["config"]["batch_size"] == executed["batch_size"] == 32
+    assert stored["config"]["train_size"] == executed["train_size"] == 100
+    assert not stored["preregistered"]
+
+
 def test_write_outputs_emits_json_csv_and_markdown(tmp_path):
     payload = _payload([_seed_result(seed, 0.62, 0.001) for seed in phase0.TARGET_SEEDS])
     for result in payload["seeds"]:
@@ -327,6 +396,8 @@ def test_aggregate_refuses_to_mix_slices(tmp_path):
     for offset, seed in enumerate(phase0.TARGET_SEEDS):
         result = _seed_result(seed, 0.7, 0.001)
         result["config"] = phase0.frozen_config()
+        for key in ("epochs", "batch_size", "num_shadows", "train_size", "permutation_reps", "smoke"):
+            result[key] = result["config"][key]
         result["preregistered"] = True
         result["slice"] = {"fingerprint": f"{offset}" * 64, "state": "CA"}
         (inputs / f"seed_{seed}.json").write_text(json.dumps(result))

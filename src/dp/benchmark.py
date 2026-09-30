@@ -215,6 +215,9 @@ def train_dpsgd(
     The achieved epsilon is read back from the privacy accountant after
     training; no epsilon values are hardcoded.  Returns the model,
     train/val/test scores and an accounting-metadata dict.
+
+    Accounting is conditional on prepared records, not the raw-data pipeline:
+    scaling, categorical vocabularies and training-derived targets are not DP.
     """
     import torch
     from opacus import PrivacyEngine
@@ -261,6 +264,7 @@ def train_dpsgd(
         "epochs": int(_DPSGD_EPOCHS),
         "seed": int(seed),
         "accountant": "rdp",
+        "privacy_scope": "prepared-record DP-SGD only; preprocessing/target not accounted",
     }
     return (
         model,
