@@ -1,4 +1,14 @@
-# Publication correctness status — 2026-09-30
+# Publication correctness status — updated 2026-10-01
+
+**Current submission-gate update:** the utility-decision branch now includes
+the 840-fit independent ACS replication, 400-fit published AUTO-S comparison,
+fresh complete-family calibration, deeper targeted literature review and a
+TMLR-style review PDF. See the [supplementary findings](../reports/configuration_selection/FOLLOWUP_FINDINGS.md)
+and [claim/author review register](SUBMISSION_REVIEW.md). There are 372 passing
+applicable tests. The paper remains a descriptive replication candidate:
+novelty and venue suitability are not confirmed, useful ACS certification is
+not established, and author/expert review is still required. Historical
+attack-branch requirements below remain separate from this utility paper.
 
 The historical PDF in `paper/` is superseded. Its proxy-heavy smoker task and
 broad privacy/utility conclusions do not describe the corrected benchmark.

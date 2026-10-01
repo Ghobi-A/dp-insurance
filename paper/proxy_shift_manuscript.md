@@ -1,4 +1,4 @@
-# Stress-Testing Utility Recommendations for DP-SGD in Tabular Classification
+# Configuration and Uncertainty Sensitivity of DP-SGD Utility Recommendations: An ACS Decision Audit
 
 **Editable research draft — updated 1 October 2026.** Author names and affiliations
 are to be supplied by the author. This draft replaces neither the MSc thesis
@@ -7,25 +7,25 @@ that a new DP mechanism or inference method has been invented.
 
 ## Abstract
 
-Selecting a differentially private training budget using source-distribution
-utility can obscure two distinct failures: a loss relative to a non-private
-reference and an absolute performance floor under distribution shift. We
-evaluate validation-only recommendations for DP-SGD, separating matched
-ordinary, clipping-only and noisy training and testing frozen decisions in
-held-out environments. Fresh-seed synthetic development shows that the
-earlier clipping-dominated interaction depends strongly on the training
-recipe and clipping norm. A five-state ACS income pilot shows that conservative
-validation bounds can change recommendations to abstentions, while a larger
-clipping norm improves source utility and enables selections that pass the
-two external-state tests. These results motivate configuration-aware auditing
-of utility recommendations; they do not establish universal benefits of proxy
-stress testing. The primary fresh-seed synthetic contrast and its uncertainty
-are reported below. A separate 20-seed ACS 2017 replication under two representations finds
-that joint configuration search restores recommendations, but source-only
-joint search has the same successful yield as shift-aware search. Broader
-simultaneous calibration exposes undercoverage in a small imbalanced clustered
-scenario. This is a candidate replication and negative-result benchmark; its
-incremental contribution requires external scholarly review.
+Utility-constrained recommendations for DP-SGD depend on training configuration,
+validation uncertainty and the environments used for selection. We audit these
+decisions using matched ordinary, clipping-only and noisy controls, frozen
+validation choices and held-out ACS state tests. A synthetic study and ACS 2018
+pilot motivate an independently frozen ACS 2017 replication with 840 fits
+across two representations. Joint configuration search produces successful
+recommendations in all 20 seed cases per representation, compared with zero
+or one for a restricted epsilon-only baseline. Source-only joint search matches
+shift-aware search on this replication, so expansion of the candidate bank
+explains the availability gain. A supplementary 400-fit comparison evaluates
+published AUTO-S clipping under a fixed matched recipe. It produces no
+uncertainty-bound recommendations, while standard norm search retains high
+yield; this is not a tuned algorithm ranking. Fresh simultaneous calibration
+reproduces undercoverage in a small rare-label clustered scenario (86.9%
+against nominal 95%). A conservative concentration sensitivity covers every
+valid Gaussian simulation but abstains on all ACS cases. These results support
+configuration-sensitive decision auditing and explicit coverage/abstention
+reporting, without a new mechanism, reliable ACS certification or established
+general benefit of shift-aware selection.
 
 ## 1. Research question and relationship to the MSc
 
@@ -78,6 +78,11 @@ already establish joint clipping/learning-rate effects. Panda et al. [9]
 combine private HPO with OOD evaluation. DomainBed [10] treats model selection
 as essential to domain generalization. Accuracy First [11] and Brownian Noise
 Reduction [12] already optimize privacy subject to accuracy requirements.
+Their methods analyze the private release and adaptive utility checks;
+our fixed public-data bank does not implement those mechanisms. Papernot
+and Steinke [16] and Koskela and Kulkarni [17] likewise account for search
+privacy, which is outside our per-candidate accounting. The supplementary
+training comparator uses published AUTO-S [14], not a new clipping method.
 Consequently, neither the selection problem nor a joint search is our method
 novelty. The [full survey](../docs/CONFIGURATION_SELECTION_LITERATURE.md) maps
 sixteen related sources and the remaining evidence boundary.
@@ -248,8 +253,8 @@ independent experimental evidence or the multiplicity-adjusted selection rule.
 
 ### 4.4 Fresh-seed primary result
 
-The exact primary estimate and interval are recorded in
-`reports/publication_stage/confirmation/primary_result.json`. Across 20 fresh
+The exact primary estimate and interval are recorded in the confirmation
+stage's `primary_result.json`. Across 20 fresh
 seeds, the norm-1 minus norm-5 interaction was **0.008275 AUC**, with paired-mean
 95% interval **[0.004092, 0.012458]** and two-sided p=0.000556. The positive
 contrast is distinguishable from zero in the specified experiment. Its
@@ -318,6 +323,92 @@ The study uses explicitly asymptotic estimates and does not provide certified
 utility. [Detailed findings and provenance](../reports/configuration_selection/FINDINGS.md)
 retain the complete protocols, launch hashes, archive checksums and accounting.
 
+### 4.6 Supplementary published-clipping comparison
+
+After inspecting the original replication and calibration outcomes, we froze
+a dated supplementary protocol and used new seeds 300-319 on the same known
+ACS 2017 split. This is supplementary evidence, not a new independent-domain
+confirmation. Each representation adds 200 fits: one ordinary reference,
+three transformed/noise-free controls and six DP candidates per seed.
+AUTO-S [14] uses all-parameter per-example normalization
+$g_i/(\lVert g_i\rVert_2+.01)$, unit sensitivity and the same Opacus noise,
+expected-batch normalization and accounting. Standard C=1/C=5 and AUTO-S
+share the base 16-unit MLP, 50 epochs and LR .1. These fixed choices are not
+tuned after test outcomes and do not reproduce the published vision/NLP suite.
+
+All rules have the same 36-endpoint validation family and fixed ordinary
+reference. This differs from Section 4.5's 360-endpoint bank/reference family;
+cross-study yield changes do not isolate an algorithm effect. Within this
+supplement, successful cases require both CO and UT to meet the original gap
+.03 and AUC floor .70. The following rows use safety margin zero:
+
+| Representation | Selection / uncertainty | Selected | Successful |
+|---|---|---:|---:|
+| Hashed | AUTO-S source / point | 0/20 | 0/20 |
+| Hashed | AUTO-S source / sandwich | 0/20 | 0/20 |
+| Hashed | Standard joint source / point or sandwich | 20/20 | 20/20 |
+| Hashed | Combined shift / point or sandwich | 20/20 | 20/20 |
+| Digits | AUTO-S source / point | 10/20 | 5/20 |
+| Digits | AUTO-S shift / point | 2/20 | 2/20 |
+| Digits | AUTO-S source or shift / sandwich | 0/20 | 0/20 |
+| Digits | Standard joint source / point or sandwich | 20/20 | 19/20 |
+| Digits | Combined shift / point or sandwich | 20/20 | 20/20 |
+| Both | Every policy / concentration sensitivity | 0/20 | 0/20 |
+
+AUTO-S does not improve recommendation yield under this one schedule. This
+does not establish inferiority after appropriate learning-rate/epoch tuning.
+Combined shift versus combined source has yield difference 0 for hashing
+and .05 for digits. Conservative paired seed-case intervals are [-.1968,.1968]
+and [-.1961,.2793], respectively. The digit gain is one case; the interval
+includes zero and does not establish a reliable shift-validation benefit.
+These are supplementary descriptive contrasts, not multiplicity-adjusted
+confirmatory tests. Both standard source and shift joint rules had 20/20
+success in the original independent replication; retain both findings.
+
+![Successful recommendation yield for the supplementary matched clipping study. The conservative sensitivity abstains for every policy.](../reports/configuration_selection/clipping_comparison.png)
+
+### 4.7 Fresh calibration and a conservative sensitivity
+
+Fresh simulation seed 20261002 repeats the three known Gaussian clustered
+scenarios with 200 draws each and the original 360 endpoints. One rare-label
+draw has fewer than 20 records/class and is excluded by the original validity
+rule; 599 draws are valid. The original sandwich procedure is unchanged.
+
+| Prevalence / households | Sandwich simultaneous coverage | Exact binomial 95% interval | Concentration coverage | Mean raw gap radius: sandwich / concentration |
+|---|---:|---|---:|---|
+| .10 / 100 | 173/199 (.8693) | [.8144,.9128] | 199/199 | .1404 / 1.1472 |
+| .30 / 250 | 191/200 (.9550) | [.9163,.9792] | 200/200 | .0653 / .5901 |
+| .50 / 250 | 194/200 (.9700) | [.9358,.9889] | 200/200 | .0486 / .5704 |
+
+The rare-label failure reproduces the original .880 coverage result. It cannot
+be repaired by relabelling a nondegenerate computation as supported inference.
+The manuscript therefore retains sandwich selection as an asymptotic heuristic
+and removes dependable certification from its contribution claim.
+
+For a conservative sensitivity, apply standard bounded differences [15] to
+independent score-generating households conditional on the label vector and
+cluster membership. With P/N positive/negative records and household counts
+$p_h,n_h$, changing a household's scores affects at most
+$c_h=p_h/P+n_h/N-p_hn_h/(PN)$ of all positive-negative rank pairs. Let
+$r=\sqrt{\tfrac12\sum_h c_h^2\log(M/\alpha)}$ and
+$w=\sum_h p_hn_h/(PN)$, where M is the endpoint family. A candidate-AUC kernel
+has range [0,1]; a paired-gap kernel has range [-1,1]. Conditional-expectation
+radii are r and 2r. Under a common class-conditional marginal score law across
+households **after conditioning on the entire label vector**, within-household
+pair bias relative to the marginal target is bounded by w and 2w. Use candidate
+lower AUC $\widehat A-r-w$ and upper gap $\widehat G+2r+2w$.
+
+These conditions hold in the simulated score DGP, but need not hold in ACS:
+households may be dependent and conditional score laws may vary with their
+labels and other attributes. Thus concentration selection on ACS is an
+assumption-dependent sensitivity, not a survey-design or unseen-state
+certificate. All 599 valid simulations are covered; the coverage lower
+confidence limits are about .982, not proof of universal coverage. The bounds
+are so wide that every ACS rule abstains, even at zero safety margin. Exact
+seed-yield intervals do not remedy AUC uncertainty or survey assumptions.
+
+![Fresh complete-family calibration. Error bars describe Monte Carlo coverage uncertainty; they are not ACS validation intervals.](../reports/configuration_selection/calibration_followup.png)
+
 ## 5. Interpretation and submission boundary
 
 The evidence currently supports checking clipping/training configuration
@@ -334,15 +425,23 @@ stronger recipe/logistic comparison have now been executed (Section 4.5).
 They narrow the interpretation to configuration-sensitive recommendation
 availability; shift-aware search adds no successful-yield improvement on the
 examined splits. Before submission, assess scholarly novelty and venue fit
-against the expanded literature and address the failed simultaneous calibration
-if inference reliability is a central contribution. Automatic/adaptive clipping
-and published private-HPO comparators remain important for any superiority claim.
+against the expanded full-text/citation-chain review. The supplementary AUTO-S
+comparison and fresh calibration response now run (Sections 4.6-4.7).
+Reliable operational certification is excluded: the sandwich rule undercovers
+and the assumption-dependent conservative fallback abstains. A useful,
+well-calibrated operational selector remains future work. Appropriate tuning
+and a faithfully implemented private-HPO comparator would be required for
+algorithm/search superiority, which is not claimed here.
 ACS is already implemented and executed, so another unrelated dataset is
 optional for this narrow claim. It becomes necessary if claiming cross-domain
 generality. The tiny insurance table cannot provide that generality merely by
 remaining in the paper. A stronger non-neural baseline, selected only on
 validation data, would help establish that failures are not an undertrained
-MLP artifact. No automated script can guarantee sufficient scholarly novelty.
+MLP artifact; the original extension already includes a validation-selected
+logistic comparison. No automated script can guarantee sufficient scholarly
+novelty. TMLR's replication-friendly criteria provide a plausible route to
+assess reader interest, without establishing acceptance. Author and external
+expert review remain necessary before an actual submission.
 
 ## 6. Privacy scope, reproducibility and limitations
 
@@ -368,6 +467,15 @@ official data access. Seeds reproduce experimental streams conditional on
 software/hardware; tests check invariants rather than certify scientific
 conclusions. The historical PDF and unsupported demographic significance
 claims must not be used as the submission manuscript.
+
+The supplementary protocol was committed locally before launch; its identical
+tree was pushed during execution. Source hashes verify no training-code change
+between launch and completed manifests. It is not independently registered,
+and the external state/year outcomes were already known. A source-equivalent
+public protocol snapshot is commit `9fe78890ed716b2f4ec808d7f3389d326acc203a`.
+The new run-verification checks account for all 400 fits, frozen choices and
+their subsequent decisions. They validate saved invariants, not a second full
+reproduction or the statistical assumptions.
 
 ## References
 
@@ -406,3 +514,15 @@ claims must not be used as the submission manuscript.
     NeurIPS. https://arxiv.org/abs/2206.07234
 13. U.S. Census Bureau. 2017 ACS one-year PUMS person archives.
     https://www2.census.gov/programs-surveys/acs/data/pums/2017/1-Year/
+14. Bu, Z., Wang, Y.-X., Zha, S., Karypis, G. (2023). *Automatic Clipping:
+    Differentially Private Deep Learning Made Easier and Stronger*. NeurIPS.
+    https://proceedings.neurips.cc/paper_files/paper/2023/hash/8249b30d877c91611fd8c7aa6ac2b5fe-Abstract-Conference.html
+15. Warnke, L. (2016; online 2015). *On the Method of Typical Bounded Differences*.
+    Combinatorics, Probability and Computing, 25(2), 269-299. Standard bounded
+    differences is background here; the present study does not use its typical-differences extension.
+    https://arxiv.org/abs/1212.5796
+16. Papernot, N., Steinke, T. (2022). *Hyperparameter Tuning with Renyi
+    Differential Privacy*. ICLR. https://arxiv.org/abs/2110.03620
+17. Koskela, A., Kulkarni, T. (2023). *Practical Differentially Private
+    Hyperparameter Tuning with Subsampling*. NeurIPS.
+    https://papers.neurips.cc/paper_files/paper/2023/file/59b9582cd35f555ea8415030073e7b22-Paper-Conference.pdf

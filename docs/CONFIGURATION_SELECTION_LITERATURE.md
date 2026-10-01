@@ -97,3 +97,39 @@ The original MSc connection remains tabular privacy-utility evaluation and
 feature perturbation. Insurance is the motivating case; it cannot establish
 cross-domain generality. ACS replication strengthens this narrow scope;
 a third independent domain is necessary only for broader cross-domain claims.
+
+## Full-text and citation-chain follow-up — 1 October 2026
+
+After the initial outcomes, inspect the closest methods in their primary
+full texts rather than treating the initial abstract matrix as sufficient.
+This remains a targeted survey, not an exhaustive proof of absence.
+
+| Paper and inspected locations | Comparison boundary after deeper inspection |
+|---|---|
+| Accuracy First: Sections 2.2–3, Algorithms 1–2 and the private ERM construction, [full text](https://arxiv.org/html/1705.10829v1) | Correlated noise reduction and InteractiveAboveThreshold account for stopping/utility queries. Our independent candidates and public AUC checks implement neither construction. A new epsilon-selection problem is not claimed. |
+| Brownian Noise Reduction: Sections 1–3 and 5, [proceedings PDF](https://proceedings.neurips.cc/paper_files/paper/2022/file/48aaa5ea741ae8430bd58e25917d267d-Paper-Conference.pdf) | Brownian release and ReducedAboveThreshold give adaptive privacy boundaries. Our per-model RDP reports are not an alternative private release mechanism. |
+| Panda et al.: Sections 2–5, Algorithm 2, Appendix B.1/B.2, [full text](https://arxiv.org/html/2212.04486v3) | Their low-budget adaptive trials, scaling of LR/steps and composed search accounting differ from our fixed bank. OOD evaluation is already present; a fixed grid cannot be labelled a reproduction of that HPO. |
+| R+R: Sections III-C/D, IV, V-C and conclusion, [full text](https://arxiv.org/html/2411.02051v1) | Their factorial replication establishes coupled clipping/LR effects. Our added endpoint is recommendation yield/abstention under explicit constraints; the underlying training interaction is established. |
+| Automatic Clipping: Sections 3–4 and Appendix K, [proceedings PDF](https://proceedings.neurips.cc/paper_files/paper/2023/file/8249b30d877c91611fd8c7aa6ac2b5fe-Paper-Conference.pdf) | AUTO-S has a published formula and an Opacus implementation recipe. The supplementary study uses that rule under a fixed matched tabular schedule, without claiming a new optimizer or reproducing its vision/NLP performance claims. |
+| Koskela & Kulkarni (NeurIPS 2023): abstract, Sections 1–3 and tuning/privacy methodology, [proceedings PDF](https://papers.neurips.cc/paper_files/paper/2023/file/59b9582cd35f555ea8415030073e7b22-Paper-Conference.pdf) | Randomized tuning on a subsample and extrapolation have a specific RDP search analysis. A public-data tuning bank does not establish the same release guarantee. |
+
+Panda et al.'s bibliography also identifies Hulkund et al., *Limits of
+Algorithmic Stability for Distributional Generalization* (2023),
+[OpenReview](https://openreview.net/forum?id=PoU_NgCStE5). Direct full-text
+retrieval met a verification wall. Its result is not inferred solely from
+Panda et al.'s characterization; retain it as an unresolved primary-source
+check. The 2026 publisher follow-up above likewise remains unresolved.
+Additional targeted searches combining ACS, automatic clipping, recommendation
+abstention and utility-constrained selection did not resolve a first-ever
+benchmark claim. Search non-detection is not evidence of absence.
+
+The [supplementary protocol](CLIPPING_FOLLOWUP_PROTOCOL.md) chooses a published
+clipping-rule comparison that directly fits the observed configuration issue.
+Full private-HPO superiority is removed from scope, so implementing an
+approximate adaptive search under the wrong privacy accounting is unnecessary.
+
+**Updated gate:** pursue an empirical replication/decision audit, preserve the
+null shift-validation finding and failed asymptotic calibration, and justify
+what a reader learns beyond the established clipping interaction. External
+human assessment of that contribution is still required; this survey cannot
+confirm publication-level originality.

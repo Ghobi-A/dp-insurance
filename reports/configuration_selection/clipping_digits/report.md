@@ -1,0 +1,66 @@
+# Supplementary AUTO-S comparator
+
+| policy                | uncertainty_bounds   |   safety_margin |   n_cases |   coverage |   successful_yield |   failed_yield |   conditional_failure |   selected_worst_auc | bound_rule    |
+|:----------------------|:---------------------|----------------:|----------:|-----------:|-------------------:|---------------:|----------------------:|---------------------:|:--------------|
+| auto_s_shift          | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| auto_s_shift          | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| auto_s_source         | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| auto_s_source         | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| combined_shift        | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| combined_shift        | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| combined_source       | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| combined_source       | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_c1_shift     | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_c1_shift     | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_c1_source    | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_c1_source    | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_c5_shift     | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_c5_shift     | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_c5_source    | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_c5_source    | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_joint_shift  | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_joint_shift  | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_joint_source | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| standard_joint_source | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | concentration |
+| auto_s_shift          | False                |            0    |        20 |       0.1  |               0.1  |           0    |                 0     |             0.823639 | point         |
+| auto_s_shift          | False                |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | point         |
+| auto_s_source         | False                |            0    |        20 |       0.5  |               0.25 |           0.25 |                 0.5   |             0.820746 | point         |
+| auto_s_source         | False                |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | point         |
+| combined_shift        | False                |            0    |        20 |       1    |               1    |           0    |                 0     |             0.833598 | point         |
+| combined_shift        | False                |            0.01 |        20 |       1    |               1    |           0    |                 0     |             0.839417 | point         |
+| combined_source       | False                |            0    |        20 |       1    |               0.95 |           0.05 |                 0.05  |             0.83254  | point         |
+| combined_source       | False                |            0.01 |        20 |       1    |               0.95 |           0.05 |                 0.05  |             0.833359 | point         |
+| standard_c1_shift     | False                |            0    |        20 |       0.8  |               0.7  |           0.1  |                 0.125 |             0.824151 | point         |
+| standard_c1_shift     | False                |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | point         |
+| standard_c1_source    | False                |            0    |        20 |       1    |               0.9  |           0.1  |                 0.1   |             0.823954 | point         |
+| standard_c1_source    | False                |            0.01 |        20 |       0.05 |               0.05 |           0    |                 0     |             0.826815 | point         |
+| standard_c5_shift     | False                |            0    |        20 |       1    |               1    |           0    |                 0     |             0.833865 | point         |
+| standard_c5_shift     | False                |            0.01 |        20 |       1    |               1    |           0    |                 0     |             0.839417 | point         |
+| standard_c5_source    | False                |            0    |        20 |       1    |               0.95 |           0.05 |                 0.05  |             0.83254  | point         |
+| standard_c5_source    | False                |            0.01 |        20 |       1    |               0.95 |           0.05 |                 0.05  |             0.833359 | point         |
+| standard_joint_shift  | False                |            0    |        20 |       1    |               1    |           0    |                 0     |             0.833598 | point         |
+| standard_joint_shift  | False                |            0.01 |        20 |       1    |               1    |           0    |                 0     |             0.839417 | point         |
+| standard_joint_source | False                |            0    |        20 |       1    |               0.95 |           0.05 |                 0.05  |             0.83254  | point         |
+| standard_joint_source | False                |            0.01 |        20 |       1    |               0.95 |           0.05 |                 0.05  |             0.833359 | point         |
+| auto_s_shift          | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | sandwich      |
+| auto_s_shift          | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | sandwich      |
+| auto_s_source         | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | sandwich      |
+| auto_s_source         | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | sandwich      |
+| combined_shift        | True                 |            0    |        20 |       1    |               1    |           0    |                 0     |             0.839942 | sandwich      |
+| combined_shift        | True                 |            0.01 |        20 |       1    |               1    |           0    |                 0     |             0.845763 | sandwich      |
+| combined_source       | True                 |            0    |        20 |       1    |               0.95 |           0.05 |                 0.05  |             0.833359 | sandwich      |
+| combined_source       | True                 |            0.01 |        20 |       1    |               1    |           0    |                 0     |             0.839611 | sandwich      |
+| standard_c1_shift     | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | sandwich      |
+| standard_c1_shift     | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | sandwich      |
+| standard_c1_source    | True                 |            0    |        20 |       0    |               0    |           0    |               nan     |           nan        | sandwich      |
+| standard_c1_source    | True                 |            0.01 |        20 |       0    |               0    |           0    |               nan     |           nan        | sandwich      |
+| standard_c5_shift     | True                 |            0    |        20 |       1    |               1    |           0    |                 0     |             0.839942 | sandwich      |
+| standard_c5_shift     | True                 |            0.01 |        20 |       1    |               1    |           0    |                 0     |             0.845763 | sandwich      |
+| standard_c5_source    | True                 |            0    |        20 |       1    |               0.95 |           0.05 |                 0.05  |             0.833359 | sandwich      |
+| standard_c5_source    | True                 |            0.01 |        20 |       1    |               1    |           0    |                 0     |             0.839611 | sandwich      |
+| standard_joint_shift  | True                 |            0    |        20 |       1    |               1    |           0    |                 0     |             0.839942 | sandwich      |
+| standard_joint_shift  | True                 |            0.01 |        20 |       1    |               1    |           0    |                 0     |             0.845763 | sandwich      |
+| standard_joint_source | True                 |            0    |        20 |       1    |               0.95 |           0.05 |                 0.05  |             0.833359 | sandwich      |
+| standard_joint_source | True                 |            0.01 |        20 |       1    |               1    |           0    |                 0     |             0.839611 | sandwich      |
+
+Fixed matched recipe, not a reproduction of published vision/NLP benchmarks. Concentration rules on ACS are assumption-dependent sensitivities.

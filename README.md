@@ -12,7 +12,7 @@ grid, with leakage-safe evaluation, repeated-seed uncertainty, empirical
 privacy audits, membership-inference attacks and group-fairness analysis —
 all reproduced by CI.
 
-**Publication status:** the PDF in `paper/` is a superseded historical
+**Publication status:** the historical PDF in `paper/` is a superseded
 manuscript, not the current benchmark or a submission-ready paper. See
 [`docs/PUBLICATION_STATUS.md`](docs/PUBLICATION_STATUS.md) for the corrected
 privacy boundary, completed ladder result, and remaining research requirements.
@@ -33,6 +33,16 @@ restores successful recommendations, but source-only joint search matches
 shift-aware successful yield. Simultaneous AUC calibration undercovers in a
 small imbalanced clustered scenario. These findings support a bounded
 replication/negative-result benchmark; novelty and certification are not claimed.
+
+**Supplementary submission-gate follow-up:** [published AUTO-S comparator and calibration protocol](docs/CLIPPING_FOLLOWUP_PROTOCOL.md),
+[400-fit findings](reports/configuration_selection/FOLLOWUP_FINDINGS.md),
+[TMLR-style review PDF](paper/submission/review_manuscript.pdf), and
+[claim/author review](docs/SUBMISSION_REVIEW.md). Fresh calibration reproduces
+the rare-label sandwich failure (86.9%); a conservative sensitivity covers all
+valid Gaussian draws but abstains on every ACS case. AUTO-S does not improve
+yield under the fixed matched schedule. These additions narrow the paper to a
+descriptive decision audit. **372 tests pass**; the PDF is not submitted or
+under review, and human author/expert assessment remains required.
 
 The reported Opacus budget covers DP-SGD on **prepared feature/label records**.
 Scaling, categorical vocabularies, and the `high_cost` training-median target

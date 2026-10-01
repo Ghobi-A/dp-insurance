@@ -159,3 +159,14 @@ simulation undercovers. The remaining gate is scholarly contribution review,
 calibration remediation if certification is claimed, and stronger published
 algorithm comparators if asserting superiority. More seeds alone do not
 establish novelty. Preserve the positive/null findings and the old pilot.
+
+## Supplementary submission-gate execution
+
+The [dated follow-up](CLIPPING_FOLLOWUP_PROTOCOL.md) now completes another
+400 matched fits with published AUTO-S and fresh calibration. The
+[follow-up findings](../reports/configuration_selection/FOLLOWUP_FINDINGS.md)
+retain fixed-recipe comparator limitations, the reproduced sandwich
+undercoverage, and conservative fallback abstentions. The maintained
+manuscript and TMLR-style PDF reflect the supported descriptive scope.
+The [submission review](SUBMISSION_REVIEW.md) documents the plausible venue
+route and concrete human author/expert review; publication is not guaranteed.
