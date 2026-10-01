@@ -1,0 +1,11 @@
+{
+  "n_seed_units": 20,
+  "discordant_wins": 20,
+  "discordant_losses": 0,
+  "difference": 1.0,
+  "ci95_lower": 0.6064806405907491,
+  "ci95_upper": 1.0,
+  "alpha": 0.05,
+  "method": "Bonferroni difference of Clopper-Pearson discordance intervals",
+  "scope": "independent binary seed cases conditional on fixed archives/environments; supplementary analysis"
+}

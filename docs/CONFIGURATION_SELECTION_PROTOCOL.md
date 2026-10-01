@@ -92,3 +92,15 @@ scaler; household partitioning does not provide household DP.
 Before submission: inspect these outcomes against the literature gate, add
 broader training/adaptive-clipping comparators if needed, and seek expert
 review. No outcome justifies asserting a first-ever method.
+
+## Dated supplementary inference addition — 1 October 2026
+
+Added during execution after the independent calibration diagnostic, before
+inspecting ACS decision outcomes. The frozen primary t summary is retained.
+A supplementary paired binary yield interval combines exact Clopper–Pearson
+intervals for win/loss discordance probabilities using Bonferroni. This avoids
+zero-width t intervals when all paired outcomes coincide, under independent
+seed-case assumptions on the fixed archive/split. It is a standard conservative
+construction, not a novel estimator. It does not fix validation-AUC coverage.
+All supplementary results are labelled as such rather than retrospectively
+presented as the original protocol's primary inference method.

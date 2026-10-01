@@ -129,3 +129,16 @@ def test_complete_family_calibration_smoke():
     assert result['family'] == 16
     assert len(result['scenarios']) == 3
     assert all(0 <= s['simultaneous_coverage'] <= 1 for s in result['scenarios'])
+
+
+def test_exact_paired_yield_handles_degenerate_and_null_cases():
+    from dp.selection_inference import exact_paired_yield
+    gain = exact_paired_yield(np.ones(20),np.zeros(20))
+    assert gain['difference'] == 1 and .5 < gain['ci95_lower'] < 1
+    assert gain['ci95_upper'] == 1
+    null = exact_paired_yield(np.ones(20),np.ones(20))
+    assert null['ci95_lower'] < 0 < null['ci95_upper']
+    reverse = exact_paired_yield(np.zeros(20),np.ones(20))
+    assert reverse['ci95_upper'] == pytest.approx(-gain['ci95_lower'])
+    with pytest.raises(ValueError,match='binary'):
+        exact_paired_yield([.5],[1.])

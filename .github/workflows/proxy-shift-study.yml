@@ -7,6 +7,7 @@ on:
       - src/dp/proxy_shift_components.py
       - src/dp/configuration_selection.py
       - src/dp/selection_calibration.py
+      - src/dp/selection_inference.py
       - src/dp/publication_study.py
       - src/dp/acs_publication.py
       - src/dp/auc_uncertainty.py
@@ -43,7 +44,7 @@ jobs:
           pip install -e '.[experimental,dev]'
       - name: Validate study invariants
         run: |
-          ruff check src/dp/proxy_shift.py src/dp/proxy_shift_components.py src/dp/publication_study.py src/dp/acs_publication.py src/dp/auc_uncertainty.py src/dp/publication_diagnostics.py src/dp/configuration_selection.py src/dp/selection_calibration.py tests/test_configuration_selection.py tests/test_proxy_shift.py tests/test_publication_study.py
+          ruff check src/dp/proxy_shift.py src/dp/proxy_shift_components.py src/dp/publication_study.py src/dp/acs_publication.py src/dp/auc_uncertainty.py src/dp/publication_diagnostics.py src/dp/configuration_selection.py src/dp/selection_calibration.py src/dp/selection_inference.py tests/test_configuration_selection.py tests/test_proxy_shift.py tests/test_publication_study.py
           pytest tests/test_proxy_shift.py tests/test_publication_study.py tests/test_configuration_selection.py -q
       - name: Publication-stage synthetic smoke
         run: |

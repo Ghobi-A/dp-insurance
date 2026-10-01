@@ -1,0 +1,42 @@
+{
+  "simulation_seed": 20261001,
+  "repetitions_per_scenario": 200,
+  "family": 360,
+  "n_candidates": 12,
+  "n_environments": 5,
+  "n_references": 3,
+  "nominal_simultaneous_coverage": 0.95,
+  "scenarios": [
+    {
+      "class_prevalence": 0.1,
+      "n_households": 100,
+      "shared_score_sd": 1.0,
+      "repetitions_valid": 200,
+      "class_failures": 0,
+      "unsupported_bounds": 0,
+      "simultaneous_coverage": 0.88,
+      "monte_carlo_se": 0.022978250586152115
+    },
+    {
+      "class_prevalence": 0.3,
+      "n_households": 250,
+      "shared_score_sd": 0.7,
+      "repetitions_valid": 200,
+      "class_failures": 0,
+      "unsupported_bounds": 0,
+      "simultaneous_coverage": 0.945,
+      "monte_carlo_se": 0.016120638945153514
+    },
+    {
+      "class_prevalence": 0.5,
+      "n_households": 250,
+      "shared_score_sd": 1.2,
+      "repetitions_valid": 200,
+      "class_failures": 0,
+      "unsupported_bounds": 0,
+      "simultaneous_coverage": 0.98,
+      "monte_carlo_se": 0.009899494936611668
+    }
+  ],
+  "scope": "known Gaussian marginal AUCs; unequal cluster sizes and dependent labels/scores; not ACS survey or finite-sample validation"
+}

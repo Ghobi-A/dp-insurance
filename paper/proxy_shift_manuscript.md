@@ -1,6 +1,6 @@
 # Stress-Testing Utility Recommendations for DP-SGD in Tabular Classification
 
-**Editable research draft — 30 September 2026.** Author names and affiliations
+**Editable research draft — updated 1 October 2026.** Author names and affiliations
 are to be supplied by the author. This draft replaces neither the MSc thesis
 nor its historical PDF. It reports an empirical benchmark, with no assertion
 that a new DP mechanism or inference method has been invented.
@@ -20,8 +20,12 @@ clipping norm improves source utility and enables selections that pass the
 two external-state tests. These results motivate configuration-aware auditing
 of utility recommendations; they do not establish universal benefits of proxy
 stress testing. The primary fresh-seed synthetic contrast and its uncertainty
-are reported below. This is a candidate replication and negative-result
-benchmark; its incremental contribution requires external scholarly review.
+are reported below. A separate 20-seed ACS 2017 replication under two representations finds
+that joint configuration search restores recommendations, but source-only
+joint search has the same successful yield as shift-aware search. Broader
+simultaneous calibration exposes undercoverage in a small imbalanced clustered
+scenario. This is a candidate replication and negative-result benchmark; its
+incremental contribution requires external scholarly review.
 
 ## 1. Research question and relationship to the MSc
 
@@ -68,6 +72,15 @@ external state tests. None of these ingredients alone is new. Their combination
 may support a useful empirical benchmark, but a combination is not itself
 proof of publication-level novelty. The results should be positioned as
 recipe sensitivity and negative evidence against broad stress-test claims.
+
+A subsequent targeted survey adds important constraints. Morsbach et al. [8]
+already establish joint clipping/learning-rate effects. Panda et al. [9]
+combine private HPO with OOD evaluation. DomainBed [10] treats model selection
+as essential to domain generalization. Accuracy First [11] and Brownian Noise
+Reduction [12] already optimize privacy subject to accuracy requirements.
+Consequently, neither the selection problem nor a joint search is our method
+novelty. The [full survey](../docs/CONFIGURATION_SELECTION_LITERATURE.md) maps
+sixteen related sources and the remaining evidence boundary.
 
 ## 3. Methods
 
@@ -156,7 +169,8 @@ environments. They do not certify unseen-state utility or constitute a new
 confidence procedure. Cluster independence is an approximation for ACS and
 does not model all survey design dependence. A Gaussian clustered simulation
 and a paired household bootstrap provide limited implementation/calibration
-checks; simultaneous empirical coverage across realistic data remains open.
+checks; the broader simultaneous check in Section 4.5 finds undercoverage in one
+small imbalanced scenario and does not validate ACS survey-design coverage.
 
 Let Aᵒ, Aᶜ, Aᵈ denote ordinary, clipped and DP AUC. The relative gap decomposes
 exactly as (Aᵒ−Aᵈ)=(Aᵒ−Aᶜ)+(Aᶜ−Aᵈ). The corresponding shift interaction subtracts
@@ -249,6 +263,61 @@ environment counts are not the primary statistical test and do not establish
 a recommendation-policy improvement. There were 120 confirmation fits,
 including repeated ordinary controls.
 
+### 4.5 Independent ACS 2017 configuration-selection extension
+
+Before external scoring, a separate protocol fixed CA source, OR/WA validation
+and previously unused CO/UT external tests. Twenty fresh seeds 200–219 were run
+for each of the original hashed representation and a public decimal-digit
+one-hot sensitivity. Three recipes (16-unit MLP/50 epochs/LR .1,
+32-unit MLP/100 epochs/LR .05, logistic/100 epochs/LR .1), norms 1/5 and
+epsilon 2/8 provide 420 fits per encoding, **840 in total**. Cohort sizes,
+batch size and utility limits remain 3000/2000, 256, .03 gap and .70 floor.
+The common ordinary reference is selected using source-validation AUC only.
+All decisions and the reference are persisted before loading external tests.
+The confidence family also covers every possible ordinary reference choice.
+
+The primary endpoint is successful recommendation yield over all seed/cohort
+cases; a selected case must satisfy both utility constraints in both external
+states. Abstention is zero successful yield. At zero safety margin, bounded
+fixed-recipe epsilon/source selection succeeds in 0/20 hashed and 1/20 digit
+cases, versus 20/20 for joint-recipe/shift search. **Source-only joint clipping
+and source-only joint recipe search also succeed in 20/20 under both encodings.**
+The primary yield contrast is therefore +1.00 and +.95, but demonstrates no
+additional success-yield benefit from shift-aware validation over competent
+source-only configuration search. Search sizes differ; this is not a claim
+of HPO efficiency or new selection methodology.
+
+The original specified paired t summary is retained, with its degenerate
+hashed interval flagged unsupported. A dated supplementary conservative paired
+binary construction uses Bonferroni-combined Clopper–Pearson discordance
+intervals: [.6065,1.0000] and [.5239,.9994]. These intervals concern independent
+seed streams on a fixed split, not independent states or universal transport.
+The supplementary estimator is standard and does not fix AUC-bound coverage.
+
+The point fixed-recipe source policy succeeds in 10/20 hashed cases (ten
+abstentions), and 17/20 digit cases (one abstention, two selected failures).
+Representation changes recommendation behavior. Bounded logistic-only shift
+selection also succeeds in all 20 cases under each encoding. Both source-only
+and shift-aware joint policies continue to succeed in 20/20 at safety margin
+.01. All predefined margin curves and exact-coverage comparisons are retained;
+no threshold is optimized against test failures.
+
+For the hashed base MLP at epsilon 2, mean source clipping/noise gaps are
+.02884/.00136 at norm 1, versus .00010/.01153 at norm 5. This illustrates a
+bias/noise balance under the same accounted privacy target. The stronger MLP
+has similar ordinary utility, and does not eliminate configuration sensitivity.
+These descriptive components are not a general causal mechanism claim.
+
+The full-family diagnostic has 600 clustered Gaussian simulations with
+12 candidates, five environments and three possible references (360
+endpoints). Observed simultaneous coverage is .880/.945/.980 in three
+predefined imbalance/cluster scenarios; Monte Carlo SEs are .0230/.0161/.0099.
+The .880 result limits any claim of uniform nominal .95 calibration. The
+`bounds_supported` flag checks computational nondegeneracy, not coverage.
+The study uses explicitly asymptotic estimates and does not provide certified
+utility. [Detailed findings and provenance](../reports/configuration_selection/FINDINGS.md)
+retain the complete protocols, launch hashes, archive checksums and accounting.
+
 ## 5. Interpretation and submission boundary
 
 The evidence currently supports checking clipping/training configuration
@@ -260,9 +329,14 @@ issues. The defensible publication direction is a narrow reproducible
 benchmark/negative-result contribution, subject to a reviewer finding the
 decision evaluation increment useful.
 
-Before submission, the highest-value extension is an independently frozen
-external replication with enough training seeds, at least one unseen year or
-additional states, and a representation/optimization sensitivity comparison.
+The independently frozen ACS replication, representation sensitivity and
+stronger recipe/logistic comparison have now been executed (Section 4.5).
+They narrow the interpretation to configuration-sensitive recommendation
+availability; shift-aware search adds no successful-yield improvement on the
+examined splits. Before submission, assess scholarly novelty and venue fit
+against the expanded literature and address the failed simultaneous calibration
+if inference reliability is a central contribution. Automatic/adaptive clipping
+and published private-HPO comparators remain important for any superiority claim.
 ACS is already implemented and executed, so another unrelated dataset is
 optional for this narrow claim. It becomes necessary if claiming cross-domain
 generality. The tiny insurance table cannot provide that generality merely by
@@ -316,3 +390,19 @@ claims must not be used as the submission manuscript.
    *Tutorial on Biostatistics: Receiver-Operating Characteristic (ROC) Analysis
    for Correlated Eye Data*. Ophthalmic Epidemiology, 29(2), 117–127.
    https://pmc.ncbi.nlm.nih.gov/articles/PMC8586066/
+
+8. Morsbach, F., Reubold, J., Strufe, T. (2024). *R+R: Understanding
+   Hyperparameter Effects in DP-SGD*. ACSAC. https://arxiv.org/abs/2411.02051
+9. Panda, A., Tang, X., Mahloujifar, S., Sehwag, V., Mittal, P. (2024).
+   *A New Linear Scaling Rule for Private Adaptive Hyperparameter Optimization*.
+   ICML. https://proceedings.mlr.press/v235/panda24a.html
+10. Gulrajani, I., Lopez-Paz, D. (2021). *In Search of Lost Domain Generalization*.
+    ICLR. https://arxiv.org/abs/2007.01434
+11. Ligett, K., Neel, S., Roth, A., Waggoner, B., Wu, Z. S. (2017).
+    *Accuracy First: Selecting a Differential Privacy Level for Accuracy-Constrained ERM*.
+    NeurIPS. https://arxiv.org/abs/1705.10829
+12. Whitehouse, J., Wu, Z. S., Ramdas, A., Rogers, R. (2022).
+    *Brownian Noise Reduction: Maximizing Privacy Subject to Accuracy Constraints*.
+    NeurIPS. https://arxiv.org/abs/2206.07234
+13. U.S. Census Bureau. 2017 ACS one-year PUMS person archives.
+    https://www2.census.gov/programs-surveys/acs/data/pums/2017/1-Year/

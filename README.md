@@ -25,6 +25,15 @@ including the executed five-state ACS pilot and 20-seed synthetic primary
 comparison. An [editable manuscript](paper/proxy_shift_manuscript.md) records
 the supported benchmark claim and remaining submission requirements.
 
+**1 October configuration-selection extension:** [sixteen-source literature survey](docs/CONFIGURATION_SELECTION_LITERATURE.md),
+[frozen protocol](docs/CONFIGURATION_SELECTION_PROTOCOL.md) and
+[executed findings](reports/configuration_selection/FINDINGS.md). The independent
+2017 ACS split and representation sensitivity add **840 fits**. Joint search
+restores successful recommendations, but source-only joint search matches
+shift-aware successful yield. Simultaneous AUC calibration undercovers in a
+small imbalanced clustered scenario. These findings support a bounded
+replication/negative-result benchmark; novelty and certification are not claimed.
+
 The reported Opacus budget covers DP-SGD on **prepared feature/label records**.
 Scaling, categorical vocabularies, and the `high_cost` training-median target
 are learned without privacy accounting. Train-only preprocessing prevents

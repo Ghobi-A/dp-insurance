@@ -147,3 +147,15 @@ Primary data source: [Folktables](https://github.com/socialfoundations/folktable
 and [Census 2018 PUMS](https://www2.census.gov/programs-surveys/acs/data/pums/2018/1-Year/).
 Inference background: [DeLong structural components and clustered ROC analysis](https://pmc.ncbi.nlm.nih.gov/articles/PMC8586066/).
 Known clipping/noise utility effects: [Bagdasaryan et al. (2019)](https://arxiv.org/abs/1905.12101).
+
+## 1 October execution update
+
+The [configuration-selection extension](CONFIGURATION_SELECTION_PROTOCOL.md)
+executes independent 2017 ACS CO/UT tests, 20 fresh seeds per representation,
+stronger MLP/logistic comparisons and the complete-family calibration. See
+[findings](../reports/configuration_selection/FINDINGS.md): source-only joint
+search matches shift-aware successful yield, while the rare-label clustered
+simulation undercovers. The remaining gate is scholarly contribution review,
+calibration remediation if certification is claimed, and stronger published
+algorithm comparators if asserting superiority. More seeds alone do not
+establish novelty. Preserve the positive/null findings and the old pilot.
