@@ -153,15 +153,21 @@ def insurance_cohorts(path: Path, seed: int) -> tuple[Cohort, Cohort, Cohort, di
 
 
 def train_model(cohort: Cohort, seed: int, config: StudyConfig,
-                condition: str, epsilon: float | None = None):
+                condition: str, epsilon: float | None = None, *,
+                architecture: str = "mlp", hidden_units: int = 16):
     """Same initialisation, Poisson sample stream and normalised SGD for all controls."""
     import torch
     from opacus import PrivacyEngine
     from opacus.data_loader import DPDataLoader
 
     torch.manual_seed(seed)
-    model = torch.nn.Sequential(torch.nn.Linear(cohort.X.shape[1], 16), torch.nn.Tanh(),
-                                torch.nn.Linear(16, 1))
+    if architecture == "logistic":
+        model = torch.nn.Sequential(torch.nn.Linear(cohort.X.shape[1], 1))
+    elif architecture == "mlp" and isinstance(hidden_units, int) and hidden_units > 0:
+        model = torch.nn.Sequential(torch.nn.Linear(cohort.X.shape[1], hidden_units),
+                                    torch.nn.Tanh(), torch.nn.Linear(hidden_units, 1))
+    else:
+        raise ValueError("invalid architecture/hidden units")
     optimizer = torch.optim.SGD(model.parameters(), lr=config.learning_rate)
     dataset = torch.utils.data.TensorDataset(torch.from_numpy(cohort.X),
                                             torch.from_numpy(cohort.y))

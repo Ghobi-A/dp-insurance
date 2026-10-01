@@ -11,7 +11,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-STATES = ("CA", "OR", "WA", "NV", "AZ")
+STATES = ("CA", "OR", "WA", "NV", "AZ", "CO", "UT")
+YEARS = (2017, 2018)
+REPRESENTATIONS = ("hashed", "digits")
 COLUMNS = ("SERIALNO", "SPORDER", "AGEP", "COW", "SCHL", "MAR", "OCCP", "POBP",
            "RELP", "WKHP", "SEX", "RAC1P", "PINCP", "PWGTP")
 NUMERIC_BOUNDS = {"AGEP": (0, 100), "SCHL": (0, 24), "WKHP": (0, 100)}
@@ -20,17 +22,17 @@ CATEGORIES = {"COW": tuple(range(1, 10)), "MAR": tuple(range(1, 6)),
 HASH_BUCKETS = {"OCCP": 32, "POBP": 16}
 
 
-def download(state: str, cache: Path) -> Path:
-    if state not in STATES:
-        raise ValueError("state outside frozen study")
+def download(state: str, cache: Path, year: int = 2018) -> Path:
+    if state not in STATES or year not in YEARS:
+        raise ValueError("unsupported state/year")
     cache.mkdir(parents=True, exist_ok=True)
-    path = cache / f"acs2018_{state}.zip"
+    path = cache / f"acs{year}_{state}.zip"
     if path.exists():
         with zipfile.ZipFile(path) as archive:
             if archive.testzip() is not None:
                 raise ValueError("corrupt cached archive")
         return path
-    url = f"https://www2.census.gov/programs-surveys/acs/data/pums/2018/1-Year/csv_p{state.lower()}.zip"
+    url = f"https://www2.census.gov/programs-surveys/acs/data/pums/{year}/1-Year/csv_p{state.lower()}.zip"
     partial = path.with_suffix(".partial")
     with urllib.request.urlopen(url, timeout=60) as response, partial.open("wb") as handle:
         while chunk := response.read(1024 * 1024):
@@ -42,8 +44,10 @@ def download(state: str, cache: Path) -> Path:
     return path
 
 
-def prepare_frame(raw: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
+def prepare_frame(raw: pd.DataFrame, *, year: int = 2018, representation: str = "hashed") -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     """Eligibility matches ACSIncome; public hashing is an explicit representation variant."""
+    if year not in YEARS or representation not in REPRESENTATIONS:
+        raise ValueError("unsupported year/representation")
     eligible = raw[(raw.AGEP > 16) & (raw.PINCP > 100) & (raw.WKHP > 0) & (raw.PWGTP >= 1)]
     eligible = eligible.dropna(subset=list(COLUMNS)).sort_values(["SERIALNO", "SPORDER"])
     if eligible.duplicated(["SERIALNO", "SPORDER"]).any():
@@ -66,15 +70,29 @@ def prepare_frame(raw: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray
         values = eligible[name].to_numpy()
         if not (values == np.floor(values)).all():
             raise ValueError("categorical ACS codes must be integers")
-        index = values.astype(np.int64) % buckets
-        for bucket in range(buckets):
-            columns.append((index == bucket).astype(float))
-            names.append(f"{name}_bucket_{bucket}")
+        if representation == "hashed":
+            index = values.astype(np.int64) % buckets
+            for bucket in range(buckets):
+                columns.append((index == bucket).astype(float))
+                names.append(f"{name}_bucket_{bucket}")
+        else:
+            # Public decimal digit encoding distinguishes codes without fitted domains.
+            # It imposes a compositional inductive bias; it is a sensitivity variant.
+            width = 4 if name == "OCCP" else 3
+            valid = (values >= 0) & (values < 10 ** width)
+            index = np.where(valid, values, 0).astype(np.int64)
+            for digit in range(width):
+                for category in range(10):
+                    columns.append((valid & ((index // 10 ** digit) % 10 == category)).astype(float))
+                    names.append(f"{name}_digit{digit}_{category}")
+            columns.append((~valid).astype(float))
+            names.append(f"{name}_other")
     X = np.column_stack(columns).astype(np.float32)
     y = (eligible.PINCP.to_numpy() > 50000).astype(np.float32)
     groups = eligible.SERIALNO.astype(str).to_numpy(dtype=str)
-    metadata = {"task": "ACSIncome", "year": 2018, "threshold": 50000,
-                "representation": "public bounded numeric + onehot + fixed modulo categorical hashing",
+    metadata = {"task": "ACSIncome", "year": year, "threshold": 50000,
+                "representation": representation,
+                "representation_description": "fixed public bounded numeric/onehot plus modulo hashing or decimal digits",
                 "feature_names": names, "occupation_columns": [i for i, n in enumerate(names)
                                                                  if n.startswith("OCCP_")],
                 "eligible_rows": len(y), "households": len(np.unique(groups)),
@@ -82,20 +100,23 @@ def prepare_frame(raw: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray
     return X, y, groups, metadata
 
 
-def prepare(state: str, cache: Path) -> Path:
-    output = cache / f"acs2018_{state}.npz"
+def prepare(state: str, cache: Path, *, year: int = 2018, representation: str = "hashed") -> Path:
+    if state not in STATES or year not in YEARS or representation not in REPRESENTATIONS:
+        raise ValueError("unsupported state/year/representation")
+    suffix = "" if representation == "hashed" else f"_{representation}"
+    output = cache / f"acs{year}_{state}{suffix}.npz"
     if output.exists():
         return output
-    archive_path = download(state, cache)
+    archive_path = download(state, cache, year)
     with zipfile.ZipFile(archive_path) as archive:
         members = sorted(n for n in archive.namelist() if n.lower().endswith(".csv"))
         frames = []
         for member in members:
             with archive.open(member) as handle:
                 frames.append(pd.read_csv(handle, usecols=list(COLUMNS), dtype={"SERIALNO": str}))
-    X, y, groups, metadata = prepare_frame(pd.concat(frames, ignore_index=True))
+    X, y, groups, metadata = prepare_frame(pd.concat(frames, ignore_index=True), year=year, representation=representation)
     metadata.update(state=state, archive_sha256=hashlib.sha256(archive_path.read_bytes()).hexdigest(),
-                    source_url=f"https://www2.census.gov/programs-surveys/acs/data/pums/2018/1-Year/csv_p{state.lower()}.zip")
+                    source_url=f"https://www2.census.gov/programs-surveys/acs/data/pums/{year}/1-Year/csv_p{state.lower()}.zip")
     np.savez_compressed(output, X=X, y=y, groups=groups)
     output.with_suffix(".json").write_text(json.dumps(metadata, indent=2) + "\n")
     return output
