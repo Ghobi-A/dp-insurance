@@ -1,0 +1,56 @@
+{
+  "mode": "synthetic_clipping",
+  "clip_norms": [
+    1.0,
+    5.0
+  ],
+  "alpha": 0.05,
+  "training": {
+    "seeds": [
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119
+    ],
+    "strengths": [
+      0.9
+    ],
+    "epsilons": [
+      2.0
+    ],
+    "n_train": 3000,
+    "n_eval": 4000,
+    "epochs": 50,
+    "batch_size": 256,
+    "learning_rate": 0.1
+  },
+  "stage": "prospective_confirmation",
+  "primary": {
+    "contrast": "clip1_minus_clip5 total gap interaction",
+    "epsilon": 2.0,
+    "strength": 0.9,
+    "test_retention": 0.0,
+    "practical_effect": 0.01,
+    "alpha_two_sided": 0.05,
+    "power_planning_target": 0.8,
+    "development_paired_sd": 0.008787470701024255,
+    "n_seeds": 20,
+    "planning_limitation": "normal approximation from five development seeds; not guaranteed achieved power"
+  }
+}

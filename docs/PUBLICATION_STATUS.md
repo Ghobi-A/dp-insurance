@@ -1,9 +1,21 @@
-# Publication correctness status — 2026-09-30
+# Publication correctness status — updated 2026-10-01
+
+**Current submission-gate update:** the utility-decision branch now includes
+the 840-fit independent ACS replication, 400-fit published AUTO-S comparison,
+fresh complete-family calibration, deeper targeted literature review and a
+TMLR-style review PDF. See the [supplementary findings](../reports/configuration_selection/FOLLOWUP_FINDINGS.md)
+and [claim/author review register](SUBMISSION_REVIEW.md). There are 372 passing
+applicable tests. The paper remains a descriptive replication candidate:
+novelty and venue suitability are not confirmed, useful ACS certification is
+not established, and author/expert review is still required. Historical
+attack-branch requirements below remain separate from this utility paper.
 
 The historical PDF in `paper/` is superseded. Its proxy-heavy smoker task and
 broad privacy/utility conclusions do not describe the corrected benchmark.
-There is no tracked editable manuscript source. This repository is not yet a
-submission-ready paper, and these corrections do not establish novelty.
+The new editable draft is `paper/proxy_shift_manuscript.md`; it is distinct
+from the historical PDF. This repository is not yet a submission-ready paper,
+and correctness improvements do not establish novelty. The executed next-stage
+evidence and remaining requirements are summarized in the update below.
 
 ## Privacy boundary
 
@@ -95,3 +107,14 @@ to finite points, so it does not isolate a noise-only transition.
    and DP utility literature before claiming a novel result. A benchmark or
    power-limited negative result may be useful, but novelty is not demonstrated
    by code completeness or by attaching a new title.
+# Publication-stage update, 30 September 2026
+
+The [next-stage plan](PUBLICATION_PLAN.md) has been implemented and executed:
+322 new fits, a five-state ACS external pilot, paired uncertainty/calibration,
+and a 20-fresh-seed prospective synthetic contrast. See the
+[findings](../reports/publication_stage/FINDINGS.md) and
+[editable manuscript](../paper/proxy_shift_manuscript.md). The supported claim
+is configuration-sensitive utility auditing. Proxy stress did not improve
+choices in confirmation; no new DP mechanism or general robustness claim is
+established. Independent external replication, representation/baseline
+sensitivity and scholarly review remain before submission.

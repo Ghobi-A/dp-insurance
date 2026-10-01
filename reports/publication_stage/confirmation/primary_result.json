@@ -1,0 +1,9 @@
+{
+  "n_independent_seeds": 20,
+  "mean_primary_contrast": 0.00827493633336333,
+  "ci95_lower": 0.004092266869363423,
+  "ci95_upper": 0.012457605797363238,
+  "two_sided_p": 0.0005555022822870733,
+  "practical_effect_margin": 0.01,
+  "scope": "specified synthetic DGP and recipe; not general ACS transport or novel mechanism proof"
+}
