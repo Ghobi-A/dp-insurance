@@ -154,12 +154,19 @@ def insurance_cohorts(path: Path, seed: int) -> tuple[Cohort, Cohort, Cohort, di
 
 def train_model(cohort: Cohort, seed: int, config: StudyConfig,
                 condition: str, epsilon: float | None = None, *,
-                architecture: str = "mlp", hidden_units: int = 16):
+                architecture: str = "mlp", hidden_units: int = 16,
+                clipping_mode: str = "standard", stability: float = 0.01):
     """Same initialisation, Poisson sample stream and normalised SGD for all controls."""
     import torch
     from opacus import PrivacyEngine
     from opacus.data_loader import DPDataLoader
 
+    if clipping_mode not in {"standard", "auto_s"}:
+        raise ValueError("invalid clipping mode")
+    if clipping_mode == "auto_s" and (condition == "ordinary" or config.clip_norm != 1):
+        raise ValueError("AUTO-S requires unit sensitivity and a clipped/private condition")
+    if not math.isfinite(stability) or stability <= 0:
+        raise ValueError("positive finite stability required")
     torch.manual_seed(seed)
     if architecture == "logistic":
         model = torch.nn.Sequential(torch.nn.Linear(cohort.X.shape[1], 1))
@@ -212,6 +219,14 @@ def train_model(cohort: Cohort, seed: int, config: StudyConfig,
                                      for p in model.parameters()], dim=1).norm(2, dim=1)
                 clipped_count += int((norms > config.clip_norm).sum())
                 sample_count += len(y)
+                if clipping_mode == "auto_s":
+                    # Bu et al. (NeurIPS 2023), Eq. 4.1 / Appendix K:
+                    # g_i / (||g_i|| + gamma), with R=1. The transformed
+                    # all-parameter norm is <1, so Opacus's following unit
+                    # clipping is inactive. Noise, scaling and accounting
+                    # remain in Opacus; no installed library is patched.
+                    from .automatic_clipping import normalize_grad_samples
+                    normalize_grad_samples(model.parameters(), stability)
             optimizer.step()  # empty Poisson batches still receive noise/accounting
             steps += 1
             empty_steps += int(len(y) == 0)
@@ -224,6 +239,9 @@ def train_model(cohort: Cohort, seed: int, config: StudyConfig,
                 "secure_rng": False, "accountant": "rdp" if achieved else None,
                 "privacy_scope": "per-model prepared-record add/remove accounting",
                 "training_sha256": hashlib.sha256(cohort.X.tobytes() + cohort.y.tobytes()).hexdigest()}
+    if clipping_mode == "auto_s":
+        metadata.update(clipping_mode=clipping_mode, stability=stability,
+                        comparator="Bu et al. NeurIPS 2023 AUTO-S; fixed matched recipe")
     return model, metadata
 
 

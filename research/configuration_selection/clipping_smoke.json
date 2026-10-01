@@ -1,0 +1,25 @@
+{
+  "mode": "synthetic",
+  "stage": "implementation_smoke",
+  "stability": 0.01,
+  "safety_margins": [
+    0.0
+  ],
+  "training": {
+    "seeds": [
+      300
+    ],
+    "strengths": [
+      1.0
+    ],
+    "epsilons": [
+      2.0,
+      8.0
+    ],
+    "n_train": 128,
+    "n_eval": 128,
+    "epochs": 1,
+    "batch_size": 32,
+    "learning_rate": 0.1
+  }
+}

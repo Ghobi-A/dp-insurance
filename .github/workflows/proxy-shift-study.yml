@@ -8,11 +8,16 @@ on:
       - src/dp/configuration_selection.py
       - src/dp/selection_calibration.py
       - src/dp/selection_inference.py
+      - src/dp/automatic_clipping.py
+      - src/dp/cluster_concentration.py
+      - src/dp/clipping_comparator.py
+      - src/dp/calibration_followup.py
       - src/dp/publication_study.py
       - src/dp/acs_publication.py
       - src/dp/auc_uncertainty.py
       - src/dp/publication_diagnostics.py
       - tests/test_configuration_selection.py
+      - tests/test_clipping_followup.py
       - tests/test_publication_study.py
       - tests/test_proxy_shift.py
       - research/proxy_shift/**
@@ -45,7 +50,8 @@ jobs:
       - name: Validate study invariants
         run: |
           ruff check src/dp/proxy_shift.py src/dp/proxy_shift_components.py src/dp/publication_study.py src/dp/acs_publication.py src/dp/auc_uncertainty.py src/dp/publication_diagnostics.py src/dp/configuration_selection.py src/dp/selection_calibration.py src/dp/selection_inference.py tests/test_configuration_selection.py tests/test_proxy_shift.py tests/test_publication_study.py
-          pytest tests/test_proxy_shift.py tests/test_publication_study.py tests/test_configuration_selection.py -q
+          ruff check src/dp/automatic_clipping.py src/dp/cluster_concentration.py src/dp/clipping_comparator.py src/dp/calibration_followup.py tests/test_clipping_followup.py
+          pytest tests/test_proxy_shift.py tests/test_publication_study.py tests/test_configuration_selection.py tests/test_clipping_followup.py -q
       - name: Publication-stage synthetic smoke
         run: |
           python -m dp.publication_study --config research/proxy_shift/publication_smoke.json \
@@ -53,6 +59,9 @@ jobs:
       - name: Configuration selection smoke
         run: |
           python -m dp.configuration_selection --config research/configuration_selection/smoke.json --output-dir reports/configuration_selection/smoke
+      - name: Published clipping comparator smoke
+        run: |
+          python -m dp.clipping_comparator --config research/configuration_selection/clipping_smoke.json --output-dir reports/configuration_selection/clipping_smoke
       - name: Execute exploratory profile
         env:
           PROFILE: ${{ inputs.profile || 'smoke' }}
