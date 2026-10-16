@@ -715,13 +715,14 @@ def _prepare_arrays(slice_path: Path, smoke: bool) -> tuple[np.ndarray, np.ndarr
 def run_seed_command(args: argparse.Namespace) -> int:
     log = print
     features, labels, groups, slice_meta = _prepare_arrays(args.slice_path, args.smoke)
+    smoke = bool(args.smoke or slice_meta.get("smoke"))
     # The frozen slice is 50,000 rows, so this is exactly TRAIN_SIZE there; the
     # min() only bites on a smaller smoke slice, which is never a Phase 0 result.
     train_size = (
         args.train_size if args.train_size is not None else min(TRAIN_SIZE, len(labels) // 2)
     )
     config = frozen_config(
-        args.epochs, args.shadows, args.permutation_reps, args.smoke,
+        args.epochs, args.shadows, args.permutation_reps, smoke,
         batch_size=args.batch_size, train_size=train_size,
     )
     result = run_seed(
@@ -734,7 +735,7 @@ def run_seed_command(args: argparse.Namespace) -> int:
         permutation_reps=args.permutation_reps,
         batch_size=args.batch_size,
         train_size=train_size,
-        smoke=args.smoke,
+        smoke=smoke,
         log=log,
     )
     result["config"] = config
@@ -764,6 +765,8 @@ def aggregate_command(args: argparse.Namespace) -> int:
         for key in ("epochs", "batch_size", "num_shadows", "train_size", "permutation_reps", "smoke"):
             if result.get(key) != config[key]:
                 raise SystemExit(f"seed result disagrees with its configuration: {key}")
+        if result["slice"].get("smoke") and not config["smoke"]:
+            raise SystemExit("smoke slice cannot be used as a non-smoke result")
         if result.get("preregistered") != is_preregistered(config):
             raise SystemExit("seed result has an incorrect preregistered stamp")
 

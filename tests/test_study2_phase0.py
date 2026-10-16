@@ -438,3 +438,37 @@ def test_seed_command_runs_end_to_end_in_smoke_mode(tmp_path):
     assert stored["preregistered"] is False
     assert stored["online"]["auc"] > 0
     assert len(stored["per_example"]) == stored["num_attack_examples"]
+
+
+def test_seed_inherits_slice_smoke_stamp_without_cli_flag(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        phase0, '_prepare_arrays',
+        lambda *_: (np.zeros((50_000, 2)), np.zeros(50_000),
+                    np.full(50_000, 'male'), {'smoke': True}),
+    )
+    executed = {}
+
+    def fake_run(*_, **kwargs):
+        executed.update(kwargs)
+        return {'seed': kwargs['seed']}
+
+    monkeypatch.setattr(phase0, 'run_seed', fake_run)
+    phase0.main(['seed', '--slice', 'unused.csv', '--seed', '42',
+                 '--output-dir', str(tmp_path)])
+    stored = json.loads((tmp_path / 'seed_42.json').read_text())
+    assert executed['smoke'] is True
+    assert stored['config']['smoke'] is True
+    assert stored['preregistered'] is False
+
+
+def test_aggregate_rejects_smoke_slice_with_frozen_stamp(tmp_path):
+    result = _seed_result(42, 0.7, 0.001)
+    result['config'] = phase0.frozen_config()
+    for key in ('epochs', 'batch_size', 'num_shadows', 'train_size', 'permutation_reps', 'smoke'):
+        result[key] = result['config'][key]
+    result['slice'] = {'fingerprint': 'a'*64, 'smoke': True}
+    result['preregistered'] = True
+    (tmp_path / 'seed_42.json').write_text(json.dumps(result))
+    with pytest.raises(SystemExit, match='smoke slice'):
+        phase0.main(['aggregate', '--input-dir', str(tmp_path),
+                     '--output-dir', str(tmp_path / 'out')])

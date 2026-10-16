@@ -4,8 +4,9 @@ A differential-privacy *proof* is an upper bound on the privacy loss.  An
 *audit* is the complementary object: a high-confidence **lower** bound on ε
 derived from how well an attacker can actually distinguish neighbouring
 datasets.  If a mechanism claims (ε_claim, δ)-DP but an audit reports a lower
-bound ε_lb > ε_claim, the claim is provably violated — the implementation has
-a bug, or the analysis is wrong.  This turns "is this code actually private?"
+bound ε_lb > ε_claim, the claim is rejected at the stated significance level.
+This is evidence of an implementation or analysis error, with a controlled
+false-positive probability under the audit assumptions.  This turns "is this code actually private?"
 into a testable question (see ``tests/test_audit.py``).
 
 Two estimators are provided:
@@ -24,9 +25,9 @@ Two estimators are provided:
     false-negative rates, brackets each with a Clopper–Pearson interval, and
     inverts the (ε, δ)-DP privacy region to obtain ε_lb.
 
-Both audits are *sound*: they can only certify leakage that is actually
-present.  They never over-claim privacy, so a loose audit (ε_lb far below
-ε_claim) means "not detected", not "proven safe".
+Both audits are statistically sound under their stated sampling assumptions;
+the probability of a false violation is controlled by the confidence level.
+A loose audit (ε_lb far below ε_claim) means "not detected", not "proven safe".
 """
 
 from __future__ import annotations
@@ -215,6 +216,15 @@ def epsilon_lower_bound_clopper_pearson(
     if not (0 < confidence < 1):
         raise ValueError("confidence must be in (0, 1)")
 
+    if not (0 <= delta < 1):
+        raise ValueError("delta must be in [0, 1)")
+    for name, count in (("false_positives", false_positives),
+                        ("false_negatives", false_negatives),
+                        ("num_positive_trials", num_positive_trials),
+                        ("num_negative_trials", num_negative_trials)):
+        if not isinstance(count, (int, np.integer)):
+            raise ValueError(f"{name} must be an integer")
+
     alpha = 1.0 - confidence
     _, fpr_hi = _clopper_pearson(false_positives, num_negative_trials, alpha)
     _, fnr_hi = _clopper_pearson(false_negatives, num_positive_trials, alpha)
@@ -293,6 +303,8 @@ def audit_membership_scores(
     included = np.asarray(included)
     if scores.shape != included.shape or scores.ndim != 1:
         raise ValueError("scores and included must be 1-D arrays of the same length")
+    if not np.isfinite(scores).all():
+        raise ValueError("scores must be finite")
     if not set(np.unique(included)).issubset({0, 1}):
         raise ValueError("included must be binary (0/1)")
     if not (0.0 < guess_fraction <= 1.0):
@@ -409,8 +421,15 @@ def one_run_model_audit(
     Keeping training and scoring in the ``train_and_score`` callback makes the
     audit agnostic to the mechanism: pass a DP-SGD trainer to audit DP-SGD, or a
     plain learner to check that the audit has power where memorisation is real.
-    Because the auditor only sees scores, it cannot over-state privacy — a loose
-    bound means "not detected at this power", not "proven private".
+    A loose bound means "not detected at this power", not "proven private".
+    Confidence requires independent fair inclusion bits and a scoring rule that
+    cannot access those bits except through the audited training output.
+
+    With duplication k > 1, the result bounds epsilon for adding/removing a
+    whole k-record group, at the supplied GROUP-level delta. It must not be
+    compared directly to a record-level accountant. For a record claim (e, d),
+    group privacy gives (k*e, d*sum(exp(j*e) for j in range(k))); delta is not
+    generally unchanged. This function does not perform that conversion.
 
     Args:
         canaries: The pool of canaries to include/exclude and score.
@@ -455,5 +474,7 @@ def one_run_model_audit(
     )
     result.details["canary_kind"] = canaries.kind
     result.details["duplication"] = canaries.duplication
+    result.details["privacy_unit"] = "record" if canaries.duplication == 1 else "canary-group"
+    result.details["records_per_unit"] = canaries.duplication
     result.details["included_fraction"] = float(included.mean())
     return result
