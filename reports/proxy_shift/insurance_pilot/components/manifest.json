@@ -1,0 +1,6 @@
+{
+  "input_metrics_sha256": "79f38cb6915ca8f0608fc197a3a091bd2f6774f0daab957e24928a19f9e17cdb",
+  "analysis_source_sha256": "258ebb4bbd7bac6866fd93919230c0bf027dc539127139822a0e8b35758744a0",
+  "status": "exploratory_component_analysis",
+  "warning": "pooled grid means are descriptive; no significance or equivalence claim"
+}

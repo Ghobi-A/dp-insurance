@@ -1,0 +1,29 @@
+{
+  "mode": "acs_external",
+  "clip_norms": [
+    1.0,
+    5.0
+  ],
+  "alpha": 0.05,
+  "training": {
+    "seeds": [
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "strengths": [
+      1.0
+    ],
+    "epsilons": [
+      2.0,
+      8.0
+    ],
+    "n_train": 3000,
+    "n_eval": 2000,
+    "epochs": 50,
+    "batch_size": 256,
+    "learning_rate": 0.1
+  }
+}

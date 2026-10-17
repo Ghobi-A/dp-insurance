@@ -1,0 +1,36 @@
+[
+  {
+    "representation": "hashed",
+    "status": "passed",
+    "n_fits": 200,
+    "private_candidates": 120,
+    "seed_cases": 20,
+    "checks": [
+      "launch source hashes",
+      "protocol hash",
+      "accounting cap/delta",
+      "matched training streams",
+      "frozen choice/decision consistency",
+      "external environment set",
+      "decomposition identity"
+    ],
+    "scope": "artifact/invariant checks; no full rerun or scientific certification"
+  },
+  {
+    "representation": "digits",
+    "status": "passed",
+    "n_fits": 200,
+    "private_candidates": 120,
+    "seed_cases": 20,
+    "checks": [
+      "launch source hashes",
+      "protocol hash",
+      "accounting cap/delta",
+      "matched training streams",
+      "frozen choice/decision consistency",
+      "external environment set",
+      "decomposition identity"
+    ],
+    "scope": "artifact/invariant checks; no full rerun or scientific certification"
+  }
+]

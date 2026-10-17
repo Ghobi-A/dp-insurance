@@ -1,5 +1,21 @@
 # Future Work
 
+## Active adjacent utility study — September 2026
+
+The proxy-shift recommendation study is now implemented and its initial
+synthetic/insurance pilots executed. See
+[`docs/PROXY_SHIFT_STUDY.md`](docs/PROXY_SHIFT_STUDY.md) and
+[`reports/proxy_shift/PILOT_FINDINGS.md`](reports/proxy_shift/PILOT_FINDINGS.md).
+The synthetic interaction is primarily clipping-associated; added-noise
+fragility and paper novelty are not established. Real ACS external validation
+belongs in the main study before transportability claims, while a third
+independent domain can remain future scope. The existing frozen ACS membership
+audit is a separate protocol and has not been changed or dispatched.
+
+The v3 plan below is historical. Broad utility-curve prediction overlaps
+surrogate-tabular-data and DP scaling-law literature; its earlier plausible-gap
+assessment is superseded by the new study's literature positioning.
+
 ## Predicting the Cost of Privacy (candidate v3 direction)
 
 **Research question:** To what extent can pre-training dataset and task

@@ -1,0 +1,99 @@
+{
+  "seed": 20261002,
+  "repetitions_per_scenario": 200,
+  "family": 360,
+  "n_candidates": 12,
+  "n_environments": 5,
+  "n_references": 3,
+  "nominal_simultaneous_coverage": 0.95,
+  "scenarios": [
+    {
+      "class_prevalence": 0.1,
+      "n_households": 100,
+      "shared_score_sd": 1.0,
+      "valid_repetitions": 199,
+      "class_failures": 1,
+      "methods": {
+        "sandwich": {
+          "covered": 173,
+          "simultaneous_coverage": 0.8693467336683417,
+          "coverage_ci95": [
+            0.8144495826814184,
+            0.9128464259886969
+          ],
+          "mean_gap_radius": 0.14041614028143723
+        },
+        "concentration": {
+          "covered": 199,
+          "simultaneous_coverage": 1.0,
+          "coverage_ci95": [
+            0.9816336723055847,
+            1.0
+          ],
+          "mean_gap_radius": 1.1472159665285937
+        }
+      }
+    },
+    {
+      "class_prevalence": 0.3,
+      "n_households": 250,
+      "shared_score_sd": 0.7,
+      "valid_repetitions": 200,
+      "class_failures": 0,
+      "methods": {
+        "sandwich": {
+          "covered": 191,
+          "simultaneous_coverage": 0.955,
+          "coverage_ci95": [
+            0.916297311924146,
+            0.9792195777729956
+          ],
+          "mean_gap_radius": 0.06525222206048632
+        },
+        "concentration": {
+          "covered": 200,
+          "simultaneous_coverage": 1.0,
+          "coverage_ci95": [
+            0.9817246596448638,
+            1.0
+          ],
+          "mean_gap_radius": 0.590080818108446
+        }
+      }
+    },
+    {
+      "class_prevalence": 0.5,
+      "n_households": 250,
+      "shared_score_sd": 1.2,
+      "valid_repetitions": 200,
+      "class_failures": 0,
+      "methods": {
+        "sandwich": {
+          "covered": 194,
+          "simultaneous_coverage": 0.97,
+          "coverage_ci95": [
+            0.935849373294973,
+            0.9889125443277452
+          ],
+          "mean_gap_radius": 0.04863711852017533
+        },
+        "concentration": {
+          "covered": 200,
+          "simultaneous_coverage": 1.0,
+          "coverage_ci95": [
+            0.9817246596448638,
+            1.0
+          ],
+          "mean_gap_radius": 0.5703869151249726
+        }
+      }
+    }
+  ],
+  "scope": "known conditional marginal Gaussian score laws and independent clusters; not ACS design or arbitrary-shift coverage",
+  "protocol_sha256": "5cd752fc98848ca47711450811edb4f045fb27fe208e987be9bee637eb38de34",
+  "code_hashes": {
+    "calibration_followup.py": "e2c4a84dd75506b0091f39db2808bb0b0c7f266ada83329a7b36543cb2e27b07",
+    "auc_uncertainty.py": "7c085cbe30bde2248fb59b50b6240cba977019fb09e185fc6002249aa055f326",
+    "cluster_concentration.py": "3a6c77408f00d6bb4194a380cca865911709ee4e35b9ffd7cd894d1a3fcba3cb"
+  }
+}

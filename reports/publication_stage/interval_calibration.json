@@ -1,0 +1,9 @@
+{
+  "repetitions": 400,
+  "simulation_seed": 20260930,
+  "nominal_marginal_one_sided_coverage": 0.95,
+  "gap_coverage": 0.95,
+  "floor_coverage": 0.96,
+  "monte_carlo_standard_error_at_nominal": 0.010897247358851683,
+  "limitations": "one Gaussian clustered DGP; marginal bounds only; not proof of ACS or simultaneous coverage"
+}

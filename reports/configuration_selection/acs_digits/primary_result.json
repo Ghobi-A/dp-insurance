@@ -1,0 +1,11 @@
+{
+  "endpoint": "successful recommendations / all cases; all external environments must pass",
+  "contrast": "joint_recipe_shift minus epsilon_source",
+  "n_seed_units": 20,
+  "difference": 0.95,
+  "ci95_lower": 0.8453487972795845,
+  "ci95_upper": 1.0546512027204153,
+  "interval_supported": true,
+  "interval_method": "paired seed-mean t approximation; degenerate/small-n intervals unsupported",
+  "scope": "fixed environment split; public-data selection, not a composed DP mechanism"
+}

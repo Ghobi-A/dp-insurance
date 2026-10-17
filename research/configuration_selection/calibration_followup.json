@@ -1,0 +1,7 @@
+{
+  "repetitions": 200,
+  "seed": 20261002,
+  "n_candidates": 12,
+  "n_environments": 5,
+  "n_references": 3
+}

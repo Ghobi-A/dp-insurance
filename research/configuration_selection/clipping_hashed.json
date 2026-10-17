@@ -1,0 +1,58 @@
+{
+  "mode": "acs",
+  "stage": "supplementary_after_original_outcomes",
+  "data": {
+    "year": 2017,
+    "source": "CA",
+    "validation": [
+      "OR",
+      "WA"
+    ],
+    "test": [
+      "CO",
+      "UT"
+    ],
+    "representation": "hashed"
+  },
+  "stability": 0.01,
+  "safety_margins": [
+    0.0,
+    0.01
+  ],
+  "training": {
+    "seeds": [
+      300,
+      301,
+      302,
+      303,
+      304,
+      305,
+      306,
+      307,
+      308,
+      309,
+      310,
+      311,
+      312,
+      313,
+      314,
+      315,
+      316,
+      317,
+      318,
+      319
+    ],
+    "strengths": [
+      1.0
+    ],
+    "epsilons": [
+      2.0,
+      8.0
+    ],
+    "n_train": 3000,
+    "n_eval": 2000,
+    "epochs": 50,
+    "batch_size": 256,
+    "learning_rate": 0.1
+  }
+}

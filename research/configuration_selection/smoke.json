@@ -1,0 +1,60 @@
+{
+  "mode": "synthetic",
+  "stage": "implementation_smoke",
+  "recipes": [
+    {
+      "id": "mlp_base",
+      "architecture": "mlp",
+      "hidden_units": 16,
+      "epochs": 1,
+      "learning_rate": 0.1
+    },
+    {
+      "id": "mlp_stronger",
+      "architecture": "mlp",
+      "hidden_units": 32,
+      "epochs": 1,
+      "learning_rate": 0.05
+    },
+    {
+      "id": "logistic",
+      "architecture": "logistic",
+      "epochs": 1,
+      "learning_rate": 0.1
+    }
+  ],
+  "clip_norms": [
+    1.0,
+    5.0
+  ],
+  "fixed_clip": 1.0,
+  "fixed_recipe": "mlp_base",
+  "safety_margins": [
+    0.0
+  ],
+  "primary": {
+    "policy_a": "joint_recipe_shift",
+    "policy_b": "epsilon_source",
+    "bounds": true,
+    "margin": 0.0,
+    "practical_yield_difference": 0.1,
+    "scope": "fixed 2017 ACS environments; paired seed contrast; no cross-domain claim"
+  },
+  "training": {
+    "seeds": [
+      200
+    ],
+    "strengths": [
+      0.9
+    ],
+    "epsilons": [
+      2.0,
+      8.0
+    ],
+    "n_train": 128,
+    "n_eval": 128,
+    "epochs": 50,
+    "batch_size": 32,
+    "learning_rate": 0.1
+  }
+}

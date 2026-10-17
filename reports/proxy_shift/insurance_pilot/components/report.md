@@ -1,0 +1,13 @@
+# Clipping and noise decomposition
+
+These are pooled exploratory grid means, not inferential effects.
+
+| Environment | Total DP gap change | Clipping component | Added-noise component |
+|---|---:|---:|---:|
+| proxy_0 | -0.044237 | -0.037616 | -0.006621 |
+| proxy_0.25 | -0.040487 | -0.035906 | -0.004581 |
+
+Total = clipping + added noise under matched sampling/optimisation.
+Inspect seed/budget/strength cells before drawing conclusions. A small pooled
+noise interaction does not establish equivalence or no effect in every cell.
+An interaction dominated by clipping cannot be attributed to Gaussian noise.

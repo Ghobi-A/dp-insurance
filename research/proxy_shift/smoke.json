@@ -1,0 +1,9 @@
+{
+  "seeds": [0],
+  "strengths": [0.9],
+  "epsilons": [2.0],
+  "n_train": 64,
+  "n_eval": 64,
+  "epochs": 1,
+  "batch_size": 16
+}

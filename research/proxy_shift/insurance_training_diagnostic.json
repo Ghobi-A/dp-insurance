@@ -1,0 +1,14 @@
+{
+  "dataset": "insurance",
+  "seeds": [0, 1, 2, 3, 4],
+  "strengths": [1.0],
+  "epsilons": [1.0, 2.0, 4.0, 8.0],
+  "stress_levels": [0.5, 0.75],
+  "test_levels": [0.0, 0.25],
+  "epochs": 100,
+  "batch_size": 128,
+  "learning_rate": 0.3,
+  "tau": 0.03,
+  "utility_floor": 0.7,
+  "privacy_cap": 8.0
+}

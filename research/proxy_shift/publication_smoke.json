@@ -1,0 +1,8 @@
+{
+  "mode": "synthetic_clipping",
+  "clip_norms": [1.0],
+  "training": {
+    "seeds": [10], "strengths": [0.9], "epsilons": [2.0],
+    "n_train": 128, "n_eval": 128, "epochs": 1, "batch_size": 32
+  }
+}
