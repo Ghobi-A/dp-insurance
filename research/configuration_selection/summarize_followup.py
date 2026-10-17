@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from dp.artifact_validation import verify_run
+
 
 def main():
     root = Path(__file__).resolve().parents[2]
@@ -17,6 +19,7 @@ def main():
     summaries, checks = [], []
     for encoding in ['hashed', 'digits']:
         folder = report/f'clipping_{encoding}'
+        verify_run(folder, root/'src/dp')
         manifest = json.loads((folder/'manifest.json').read_text())
         assert manifest['status'] == 'completed'
         assert len(manifest['accounting']) == 200

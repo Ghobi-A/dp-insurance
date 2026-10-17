@@ -309,3 +309,26 @@ def test_one_run_model_audit_validates_score_length():
             lambda x_aug, y_aug, cf: np.zeros(cf.shape[0] - 1),
             random_state=0,
         )
+
+
+@pytest.mark.parametrize('delta', [-0.01, 1.0, np.nan])
+def test_multi_run_rejects_invalid_delta(delta):
+    with pytest.raises(ValueError, match='delta'):
+        epsilon_lower_bound_clopper_pearson(0, 0, 100, 100, delta=delta)
+
+
+@pytest.mark.parametrize('scores', [[np.nan, 1.], [0., np.inf]])
+def test_membership_audit_rejects_nonfinite_scores(scores):
+    with pytest.raises(ValueError, match='finite'):
+        audit_membership_scores(scores, [0, 1])
+
+
+def test_duplicated_audit_reports_group_privacy_unit():
+    from dp.canaries import make_duplicated_canaries
+    canaries = make_duplicated_canaries(20, 2, duplication=3, random_state=0)
+    result = one_run_model_audit(
+        canaries, np.zeros((10, 2)), np.zeros(10),
+        lambda x, y, cf: np.zeros(len(cf)), random_state=0,
+    )
+    assert result.details['privacy_unit'] == 'canary-group'
+    assert result.details['records_per_unit'] == 3
