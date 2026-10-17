@@ -27,6 +27,40 @@ from dp.mechanisms import add_laplace_noise
 
 # --- binomial one-run estimator -------------------------------------------
 
+
+@pytest.mark.parametrize("canaries,expected", [(100, 0.699), (1000, 0.673)])
+def test_approximate_dp_matches_published_appendix_d_examples(canaries, expected):
+    result = epsilon_lower_bound_binomial(
+        75, 100, delta=1e-4, num_canaries=canaries,
+    )
+    assert result.epsilon_lower_bound == pytest.approx(expected, abs=0.001)
+
+
+def test_positive_delta_requires_total_candidates_before_abstention():
+    with pytest.raises(ValueError, match="num_canaries is required"):
+        epsilon_lower_bound_binomial(75, 100, delta=1e-4)
+    with pytest.raises(ValueError, match="num_canaries must"):
+        epsilon_lower_bound_binomial(75, 100, delta=1e-4, num_canaries=99)
+
+
+def test_approximate_dp_correction_weakens_with_delta_and_abstention_pool():
+    pure = epsilon_lower_bound_binomial(80, 100).epsilon_lower_bound
+    small = epsilon_lower_bound_binomial(80, 100, delta=1e-5, num_canaries=100)
+    large = epsilon_lower_bound_binomial(80, 100, delta=1e-3, num_canaries=1000)
+    assert pure > small.epsilon_lower_bound > large.epsilon_lower_bound
+    assert epsilon_lower_bound_binomial(
+        100, 100, delta=0.5, num_canaries=100,
+    ).epsilon_lower_bound == 0
+
+
+def test_score_auditor_passes_full_candidate_count_with_abstention():
+    included = np.tile([0, 1], 100)
+    result = audit_membership_scores(
+        included.astype(float), included, delta=1e-4, guess_fraction=0.5,
+    )
+    reference = epsilon_lower_bound_binomial(100, 100, delta=1e-4, num_canaries=200)
+    assert result.epsilon_lower_bound == pytest.approx(reference.epsilon_lower_bound)
+
 def test_binomial_perfect_privacy_yields_zero():
     # Exactly chance-level guessing (half correct) rules out no epsilon.
     result = epsilon_lower_bound_binomial(num_correct=500, num_guesses=1000)
@@ -275,3 +309,26 @@ def test_one_run_model_audit_validates_score_length():
             lambda x_aug, y_aug, cf: np.zeros(cf.shape[0] - 1),
             random_state=0,
         )
+
+
+@pytest.mark.parametrize('delta', [-0.01, 1.0, np.nan])
+def test_multi_run_rejects_invalid_delta(delta):
+    with pytest.raises(ValueError, match='delta'):
+        epsilon_lower_bound_clopper_pearson(0, 0, 100, 100, delta=delta)
+
+
+@pytest.mark.parametrize('scores', [[np.nan, 1.], [0., np.inf]])
+def test_membership_audit_rejects_nonfinite_scores(scores):
+    with pytest.raises(ValueError, match='finite'):
+        audit_membership_scores(scores, [0, 1])
+
+
+def test_duplicated_audit_reports_group_privacy_unit():
+    from dp.canaries import make_duplicated_canaries
+    canaries = make_duplicated_canaries(20, 2, duplication=3, random_state=0)
+    result = one_run_model_audit(
+        canaries, np.zeros((10, 2)), np.zeros(10),
+        lambda x, y, cf: np.zeros(len(cf)), random_state=0,
+    )
+    assert result.details['privacy_unit'] == 'canary-group'
+    assert result.details['records_per_unit'] == 3

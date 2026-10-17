@@ -4,8 +4,9 @@ A differential-privacy *proof* is an upper bound on the privacy loss.  An
 *audit* is the complementary object: a high-confidence **lower** bound on ε
 derived from how well an attacker can actually distinguish neighbouring
 datasets.  If a mechanism claims (ε_claim, δ)-DP but an audit reports a lower
-bound ε_lb > ε_claim, the claim is provably violated — the implementation has
-a bug, or the analysis is wrong.  This turns "is this code actually private?"
+bound ε_lb > ε_claim, the claim is rejected at the stated significance level.
+This is evidence of an implementation or analysis error, with a controlled
+false-positive probability under the audit assumptions.  This turns "is this code actually private?"
 into a testable question (see ``tests/test_audit.py``).
 
 Two estimators are provided:
@@ -24,9 +25,9 @@ Two estimators are provided:
     false-negative rates, brackets each with a Clopper–Pearson interval, and
     inverts the (ε, δ)-DP privacy region to obtain ε_lb.
 
-Both audits are *sound*: they can only certify leakage that is actually
-present.  They never over-claim privacy, so a loose audit (ε_lb far below
-ε_claim) means "not detected", not "proven safe".
+Both audits are statistically sound under their stated sampling assumptions;
+the probability of a false violation is controlled by the confidence level.
+A loose audit (ε_lb far below ε_claim) means "not detected", not "proven safe".
 """
 
 from __future__ import annotations
@@ -70,21 +71,27 @@ def epsilon_lower_bound_binomial(
     num_guesses: int,
     delta: float = 0.0,
     confidence: float = 0.95,
+    *,
+    num_canaries: int | None = None,
 ) -> AuditResult:
     """One-run ε lower bound from correct-guess counts (Steinke et al. 2023).
 
-    The auditor inserts ``num_guesses`` independent canaries, each randomly
-    included or excluded, and after training guesses each canary's membership.
+    The auditor inserts ``num_canaries`` independent candidates, each randomly
+    included or excluded, and after training commits at most ``num_guesses``
+    membership guesses. The guessing budget must be fixed independently of
+    the realised inclusion labels.
     Under (ε, δ)-DP the number of correct guesses ``v`` satisfies
 
         P[correct ≥ v] ≤ P[Binomial(r, e^ε/(e^ε+1)) ≥ v] + O(δ)
 
-    (Theorem 5.2).  We ignore the O(δ) term for δ = 0 (the pure-DP case this
-    project audits) and, for δ > 0, apply the standard conservative correction
-    of crediting the attacker with up to ``r · δ`` "free" correct guesses,
-    which never over-states the bound.  The reported ε_lb is the largest ε
-    whose upper-tail p-value is still ≤ β = 1 − ``confidence``; since that tail
-    is monotincreasing in ε, the root is unique and found by bisection.
+    Corollary 5.4 supplies the approximate-DP correction
+    ``2*m*delta*max_i((f(v-i)-f(v))/i)``, where ``m`` counts all candidates
+    before abstention and ``f`` is the binomial upper tail. This implements
+    that correction using the cumulative probability mass below ``v`` as in
+    Appendix D (https://arxiv.org/abs/2305.08846).
+    The reported ε_lb is the largest ε
+    whose upper-tail bound is still ≤ β = 1 − ``confidence``;
+    the crossing is found by bracketed numerical inversion.
 
     Args:
         num_correct: Number of correct membership guesses (v), 0 ≤ v ≤ r.
@@ -92,6 +99,8 @@ def epsilon_lower_bound_binomial(
             (T_i = 0) should be excluded from this count.
         delta: The δ of the (ε, δ)-DP claim being audited. 0 for pure DP.
         confidence: Confidence level 1 − β for the lower bound.
+        num_canaries: Total independent inclusion bits before abstention (m).
+            Required for positive delta; must be at least num_guesses.
 
     Returns:
         An :class:`AuditResult`. ``epsilon_lower_bound`` is 0.0 when the data
@@ -100,25 +109,33 @@ def epsilon_lower_bound_binomial(
     Raises:
         ValueError: If inputs are out of range.
     """
-    if num_guesses <= 0:
+    if not isinstance(num_guesses, (int, np.integer)) or num_guesses <= 0:
         raise ValueError("num_guesses must be positive")
-    if not (0 <= num_correct <= num_guesses):
+    if not isinstance(num_correct, (int, np.integer)) or not (0 <= num_correct <= num_guesses):
         raise ValueError("num_correct must satisfy 0 <= num_correct <= num_guesses")
     if not (0 < confidence < 1):
         raise ValueError("confidence must be in (0, 1)")
     if not (0 <= delta < 1):
         raise ValueError("delta must be in [0, 1)")
+    if num_canaries is None:
+        if delta > 0:
+            raise ValueError("num_canaries is required for positive delta (before abstention)")
+        num_canaries = num_guesses
+    if not isinstance(num_canaries, (int, np.integer)) or num_canaries < num_guesses:
+        raise ValueError("num_canaries must be an integer >= num_guesses")
 
     beta = 1.0 - confidence
-    # Conservative δ correction: discount correct guesses the attacker could
-    # have made "for free" on the δ-failure event (Steinke et al., §5).
-    effective_correct = num_correct - delta * num_guesses
-
     def tail_pvalue(epsilon: float) -> float:
-        p = np.exp(epsilon) / (np.exp(epsilon) + 1.0)
-        # P[Binomial(r, p) >= v] = sf(v - 1); use ceil for the discounted count.
-        v = int(np.ceil(effective_correct))
-        return float(stats.binom.sf(v - 1, num_guesses, p))
+        p = 1.0 / (1.0 + np.exp(-epsilon))
+        tail = float(stats.binom.sf(num_correct - 1, num_guesses, p))
+        if delta == 0 or num_correct == 0:
+            return tail
+        # For i > v, f(v-i)=1 and the denominator increases, so the
+        # maximum over 1..m is attained in 1..v (v <= r <= m).
+        offsets = np.arange(1, num_correct + 1)
+        mass = np.cumsum(stats.binom.pmf(num_correct - offsets, num_guesses, p))
+        correction = 2 * num_canaries * delta * float(np.max(mass / offsets))
+        return min(1.0, tail + correction)
 
     # If even ε → 0 (p = 0.5) is not surprising, nothing can be ruled out.
     if tail_pvalue(0.0) > beta:
@@ -138,7 +155,10 @@ def epsilon_lower_bound_binomial(
         num_guesses=num_guesses,
         num_correct=num_correct,
         method="binomial-one-run",
-        details={"delta": delta, "accuracy": num_correct / num_guesses},
+        details={
+            "delta": delta, "accuracy": num_correct / num_guesses,
+            "num_canaries": int(num_canaries), "tail_bound": "Corollary 5.4",
+        },
     )
 
 
@@ -195,6 +215,15 @@ def epsilon_lower_bound_clopper_pearson(
         raise ValueError("false_negatives out of range")
     if not (0 < confidence < 1):
         raise ValueError("confidence must be in (0, 1)")
+
+    if not (0 <= delta < 1):
+        raise ValueError("delta must be in [0, 1)")
+    for name, count in (("false_positives", false_positives),
+                        ("false_negatives", false_negatives),
+                        ("num_positive_trials", num_positive_trials),
+                        ("num_negative_trials", num_negative_trials)):
+        if not isinstance(count, (int, np.integer)):
+            raise ValueError(f"{name} must be an integer")
 
     alpha = 1.0 - confidence
     _, fpr_hi = _clopper_pearson(false_positives, num_negative_trials, alpha)
@@ -274,6 +303,8 @@ def audit_membership_scores(
     included = np.asarray(included)
     if scores.shape != included.shape or scores.ndim != 1:
         raise ValueError("scores and included must be 1-D arrays of the same length")
+    if not np.isfinite(scores).all():
+        raise ValueError("scores must be finite")
     if not set(np.unique(included)).issubset({0, 1}):
         raise ValueError("included must be binary (0/1)")
     if not (0.0 < guess_fraction <= 1.0):
@@ -292,6 +323,7 @@ def audit_membership_scores(
     result = epsilon_lower_bound_binomial(
         num_correct=correct,
         num_guesses=2 * k,
+        num_canaries=m,
         delta=delta,
         confidence=confidence,
     )
@@ -359,6 +391,7 @@ def audit_scalar_mechanism(
     return epsilon_lower_bound_binomial(
         num_correct=correct,
         num_guesses=num_guesses,
+        num_canaries=num_guesses,
         delta=delta,
         confidence=confidence,
     )
@@ -388,8 +421,15 @@ def one_run_model_audit(
     Keeping training and scoring in the ``train_and_score`` callback makes the
     audit agnostic to the mechanism: pass a DP-SGD trainer to audit DP-SGD, or a
     plain learner to check that the audit has power where memorisation is real.
-    Because the auditor only sees scores, it cannot over-state privacy — a loose
-    bound means "not detected at this power", not "proven private".
+    A loose bound means "not detected at this power", not "proven private".
+    Confidence requires independent fair inclusion bits and a scoring rule that
+    cannot access those bits except through the audited training output.
+
+    With duplication k > 1, the result bounds epsilon for adding/removing a
+    whole k-record group, at the supplied GROUP-level delta. It must not be
+    compared directly to a record-level accountant. For a record claim (e, d),
+    group privacy gives (k*e, d*sum(exp(j*e) for j in range(k))); delta is not
+    generally unchanged. This function does not perform that conversion.
 
     Args:
         canaries: The pool of canaries to include/exclude and score.
@@ -434,5 +474,7 @@ def one_run_model_audit(
     )
     result.details["canary_kind"] = canaries.kind
     result.details["duplication"] = canaries.duplication
+    result.details["privacy_unit"] = "record" if canaries.duplication == 1 else "canary-group"
+    result.details["records_per_unit"] = canaries.duplication
     result.details["included_fraction"] = float(included.mean())
     return result

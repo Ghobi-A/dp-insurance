@@ -434,6 +434,10 @@ def stratified_membership_permutation_test(
     alone cannot tell you. The bootstrap says how precise the estimate is; this
     says whether an estimate that size happens by chance.
 
+    The null is no score-membership association within groups. It is not
+    equal leakage between groups when both groups have membership signal;
+    signed-difference and gap p-values cannot establish subgroup disparity.
+
     Returns:
         One entry per statistic (``aggregate_auc``, ``aggregate_tpr``, each
         group's TPR, ``signed_difference`` and ``absolute_gap``) holding the
@@ -491,6 +495,7 @@ def stratified_membership_permutation_test(
             "null_ci95_low": float(low),
             "null_ci95_high": float(high),
             "alternative": alternatives.get(key, "greater"),
+            "null_hypothesis": "no score-membership association within groups",
             "p_value": _permutation_pvalue(
                 value, draws, alternatives.get(key, "greater")
             ),
@@ -625,74 +630,22 @@ def classify_control(
 
 
 def assess_subgroup_disparity(seed_results: Sequence[dict[str, object]]) -> tuple[str, str]:
-    """Judge subgroup TPR disparity separately from aggregate attack power.
+    """Withhold disparity inference until an equal-leakage null is specified.
 
-    Aggregate leakage says nothing about whether one sex leaks more than the
-    other, so this never inherits the aggregate verdict. Disparity is called
-    supported only when the signed direction is stable across seeds, the
-    permutation null is rejected on enough seeds, and the bootstrap interval is
-    not simply the discrete operating-point resolution.
+    Membership-label permutation tests no score-membership association within
+    groups. It does not test equal group exposure when both groups leak.
+    Retain descriptive contrasts, but do not turn those p-values into a
+    supported/unsupported disparity verdict.
     """
     completed = [r for r in seed_results if r["attack_status"] == "completed"]
     if not completed:
         return SUBGROUP_INCONCLUSIVE, "No attack completed, so no subgroup comparison exists."
-
-    signed = np.asarray(
-        [float(r["offline"]["signed_subgroup_difference"]) for r in completed], dtype=float
+    return (
+        SUBGROUP_INCONCLUSIVE,
+        "Descriptive subgroup contrasts only: membership permutation tests no "
+        "score-membership association, not equal leakage between groups. "
+        "A valid disparity test is required before a confirmatory verdict.",
     )
-    signed_p = np.asarray(
-        [
-            float(r["offline"]["permutation"]["signed_difference"]["p_value"])
-            for r in completed
-        ],
-        dtype=float,
-    )
-    gap_p = np.asarray(
-        [float(r["offline"]["permutation"]["absolute_gap"]["p_value"]) for r in completed],
-        dtype=float,
-    )
-    significant = int(np.sum((signed_p < ALPHA) | (gap_p < ALPHA)))
-    nonzero = signed[signed != 0.0]
-    stable_direction = bool(nonzero.size and np.all(np.sign(nonzero) == np.sign(nonzero[0])))
-
-    # One extra member at the 1% FPR operating point moves a subgroup TPR by
-    # 1/n_members. A "gap" smaller than that is resolution, not disparity.
-    resolutions = [
-        1.0 / max(int(r["offline"]["subgroups"][group]["members"]), 1)
-        for r in completed
-        for group in r["offline"]["subgroups"]
-    ]
-    resolution = float(max(resolutions)) if resolutions else float("inf")
-    resolvable = bool(np.all(np.abs(signed) >= resolution) and signed.size)
-
-    if significant >= MIN_SIGNIFICANT_SEEDS and stable_direction and resolvable:
-        direction = "male" if np.mean(signed) > 0 else "female"
-        return (
-            SUBGROUP_SUPPORTED,
-            f"Signed male-female TPR@1% difference keeps the same sign on every seed "
-            f"({direction} more exposed), permutation p<{ALPHA} on "
-            f"{significant}/{len(completed)} seeds, and the effect exceeds the "
-            f"{resolution:.4f} operating-point resolution.",
-        )
-
-    reasons = []
-    if not stable_direction:
-        reasons.append("the signed direction is not stable across seeds")
-    if significant < MIN_SIGNIFICANT_SEEDS:
-        reasons.append(
-            f"the permutation null is rejected on only {significant}/{len(completed)} seeds"
-        )
-    if not resolvable:
-        reasons.append(
-            f"at least one gap is within the {resolution:.4f} discrete operating-point "
-            "resolution"
-        )
-    return SUBGROUP_UNSUPPORTED, "; ".join(reasons).capitalize() + "."
-
-
-# --------------------------------------------------------------------------- #
-# Model training (torch is imported lazily so the tests do not need it)
-# --------------------------------------------------------------------------- #
 
 
 def build_mlp(n_features: int, hidden_units: Sequence[int], seed: int):
@@ -1091,6 +1044,9 @@ def render_markdown(payload: dict[str, object]) -> str:
     seed_results: list[dict[str, object]] = list(payload["seed_results"])
     lines = [
         "# Attack-power control experiment",
+        "",
+        "> Subgroup contrasts are descriptive. Membership-permutation p-values "
+        "test no within-group association, not equal subgroup leakage.",
         "",
         "## 1. Experimental design",
         "",

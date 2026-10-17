@@ -418,71 +418,22 @@ def classify_ladder_point(seed_results: Sequence[dict[str, object]]) -> tuple[st
 
 
 def classify_subgroup(seed_results: Sequence[dict[str, object]]) -> tuple[str, str]:
-    """Apply the pre-registered signed-contrast subgroup rule."""
+    """Withhold disparity inference until an equal-leakage null is specified.
+
+    Membership-label permutation tests no score-membership association within
+    groups. It does not test equal group exposure when both groups leak.
+    Retain descriptive contrasts, but do not turn those p-values into a
+    supported/unsupported disparity verdict.
+    """
     completed = [r for r in seed_results if r["attack_status"] == "completed"]
     if not completed:
-        return SUBGROUP_INCONCLUSIVE, "No attack completed, so no subgroup comparison."
-
-    signed = np.asarray(
-        [float(r["offline"]["signed_subgroup_difference"]) for r in completed], dtype=float
+        return SUBGROUP_INCONCLUSIVE, "No attack completed, so no subgroup comparison exists."
+    return (
+        SUBGROUP_INCONCLUSIVE,
+        "Descriptive subgroup contrasts only: membership permutation tests no "
+        "score-membership association, not equal leakage between groups. "
+        "A valid disparity test is required before a confirmatory verdict.",
     )
-    signed_p = np.asarray(
-        [
-            float(
-                r["offline"]["permutation"]["signed_difference"].get(
-                    "p_value_holm", np.nan
-                )
-            )
-            for r in completed
-        ],
-        dtype=float,
-    )
-    gap_p = np.asarray(
-        [
-            float(r["offline"]["permutation"]["absolute_gap"].get("p_value_holm", np.nan))
-            for r in completed
-        ],
-        dtype=float,
-    )
-    resolutions = [float(r["subgroup_resolution"]) for r in completed]
-    resolution = float(max(resolutions)) if resolutions else float("inf")
-
-    nonzero = signed[signed != 0.0]
-    stable = bool(nonzero.size and np.all(np.sign(nonzero) == np.sign(nonzero[0])))
-    significant = int(np.sum((signed_p < ALPHA) | (gap_p < ALPHA)))
-    resolvable = bool(signed.size and np.all(np.abs(signed) >= resolution))
-    # The subgroup rule is NOT relaxed for reduced-seed runs: pre-registered
-    # criterion 4 forbids single-seed effects outright, so a one-seed run can
-    # never support a disparity claim.
-    required = MIN_SIGNIFICANT_SEEDS
-    carrying = int(np.sum(np.abs(signed) >= resolution))
-    multi_seed = carrying >= required
-
-    if stable and significant >= required and resolvable and multi_seed:
-        direction = "male" if float(np.mean(signed)) > 0 else "female"
-        return (
-            SUBGROUP_SUPPORTED,
-            f"Signed male-female TPR@1% contrast keeps one sign across seeds "
-            f"({direction} more exposed), adjusted permutation p<{ALPHA} on "
-            f"{significant}/{len(completed)} seeds, and every effect exceeds the "
-            f"{resolution:.4f} one-person resolution.",
-        )
-
-    reasons = []
-    if not stable:
-        reasons.append("the signed direction is not stable across non-zero seeds")
-    if significant < required:
-        reasons.append(
-            f"the adjusted permutation null is rejected on only "
-            f"{significant}/{len(completed)} seeds ({required} required)"
-        )
-    if not resolvable:
-        reasons.append(
-            f"at least one contrast is within the {resolution:.4f} one-person resolution"
-        )
-    elif not multi_seed:
-        reasons.append("the effect is carried by a single seed")
-    return SUBGROUP_UNSUPPORTED, "; ".join(reasons).capitalize() + "."
 
 
 def detectability_frontier(points: Sequence[dict[str, object]]) -> dict[str, object]:
@@ -719,6 +670,10 @@ def prepare_seed_arrays(df: pd.DataFrame, seed: int) -> dict[str, np.ndarray]:
     """Leakage-safe split and preprocessing for one target seed.
 
     Depends only on the seed, so every ladder point sees identical partitions.
+    This is evaluation hygiene, not end-to-end DP: the training-fitted
+    transform and target definition are outside the DP-SGD accountant, and
+    shadows share that transform. Interpret the membership game conditionally
+    on prepared records, not as a raw-record pipeline audit.
     """
     from dp.pipeline import build_preprocessor
     from dp.tasks import get_task, prepare_task_data
@@ -1325,6 +1280,14 @@ def render_markdown(payload: dict[str, object]) -> str:
     summaries: list[dict[str, object]] = payload["points"]
     frontier: dict[str, object] = payload["frontier"]
     lines = ["# Worst-case neural auditability ladder", ""]
+    lines += [
+        "> Subgroup contrasts are descriptive. Membership-permutation p-values "
+        "test no within-group association, not equal subgroup leakage.",
+        "",
+        "> Accounted privacy covers DP-SGD on prepared records only. "
+        "Training-fitted preprocessing and targets are not accounted.",
+        "",
+    ]
     if payload.get("smoke"):
         lines += [
             "> **SMOKE RUN -- NOT A PRE-REGISTERED RESULT.** Produced with a lowered "

@@ -460,9 +460,9 @@ def test_study_report_has_every_required_section():
         assert section in text
 
 
-def test_study_report_labels_the_result_as_pending():
+def test_study_report_records_completed_ladder_without_claiming_follow_up_result():
     text = STUDY.read_text()
-    assert "SCIENTIFIC RESULT PENDING" in text
+    assert "LADDER COMPLETE; INSURANCE FOLLOW-UP BLOCKED BY ITS GATE" in text
     assert "NOT YET TESTED" in text
 
 

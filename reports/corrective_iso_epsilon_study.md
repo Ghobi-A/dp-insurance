@@ -1,19 +1,21 @@
 # Corrective iso-epsilon study
 
-**Status: SCIENTIFIC RESULT PENDING.** The implementation is complete and
-validated; the authoritative experiment has *not* been executed. Nothing in this
-document is a finding. Sections 7–10 are placeholders that stay empty until the
-corrected detectability ladder has run to completion on the dispatch workflow,
-and the phases downstream of it are gated on that result.
+**Status: LADDER COMPLETE; INSURANCE FOLLOW-UP BLOCKED BY ITS GATE.** The full
+manual ladder completed on 2026-08-21. No finite epsilon passed the frozen
+aggregate detection rule. The iso-epsilon claim remains untested and cannot
+be tested by continuing this insurance design under its preregistration.
+See [publication status](../docs/PUBLICATION_STATUS.md) for the run provenance,
+observed results and the later correction to the subgroup null. The design
+sections below remain a record of the planned conditional study, not results.
 
 | Phase | State |
 |---|---|
 | 1. Audit of the ladder implementation | complete — see §4 |
 | 2. Full ladder reproducibly runnable | complete — command in §4 |
-| 3. Detectability decision | **not run** (needs the full ladder) |
-| 4. Conditional iso-epsilon follow-up | **not started** — gated on Phase 3 |
+| 3. Detectability decision | complete — no finite point passes |
+| 4. Conditional iso-epsilon follow-up | **must not run** under this insurance design |
 | 5. Mechanism diagnostics | **not started** — gated on Phase 4 |
-| 6. This report | scaffolded; results pending |
+| 6. This report | updated with ladder outcome; conditional claim remains untested |
 
 ---
 
@@ -280,7 +282,8 @@ identically) does not produce a redistribution verdict, and an injected
 redistribution (recipe A exposing male members, recipe B exposing female
 members) is detected with the correct sign.
 
-*Result on real data: pending.*
+*Result on real data: not run; no finite insurance ladder point passed the
+selection gate, so this conditional experiment must not proceed.*
 
 ## 10. Mechanism diagnostics
 
@@ -315,16 +318,15 @@ silently upgraded into causal claims.
 
 ## 12. Decision / next step
 
-1. Dispatch the full detectability ladder (command in §4).
-2. Apply the pre-registered aggregate rule; report the frontier as a bracket, or
-   as unstable if non-monotonic.
-3. If a finite ε shows demonstrably nonzero aggregate attack power, run both
-   frozen recipes at that ε — independently calibrated to the same achieved ε —
-   on the eight confirmatory seeds, then apply the exact paired seed-level
-   sign-flip ΔD test in §9.
-4. If no finite ε clears the aggregate rule, stop and report that: the
-   iso-epsilon subgroup question is not answerable with this dataset, cohort
-   size and adversary, and the honest output is a null.
-5. Do not update the README headline claim until this sequence is complete.
+1. The completed ladder detected the non-private target; no finite point
+   cleared the frozen aggregate rule. Stop the insurance follow-up.
+2. Report non-detection at this power and cohort size. It is not a null result
+   for the iso-epsilon redistribution hypothesis, which was never tested.
+3. The non-private endpoint differs in clipping and sampling as well as noise;
+   any plotted bracket is descriptive of recipes, not a noise-only threshold.
+4. Do not infer equal subgroup exposure from the membership-permutation null.
+   Historical subgroup verdicts are superseded by the inference correction.
+5. ACS Phase 0 is a separately preregistered feasibility study; this correction
+   neither runs it nor changes its frozen gate.
 
 **Verdict on the candidate claim: NOT YET TESTED.**

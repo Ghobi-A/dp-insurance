@@ -1,5 +1,16 @@
 # Study 2, Phase 0 — natural-leakage feasibility gate (preregistration)
 
+## Provenance clarification (2026-09-30)
+
+The frozen numerical gate and primary raw-loss online LiRA remain unchanged.
+Every seed must record its realised batch size, training size, epochs, shadow
+count and permutation budget. A preregistered stamp requires exact equality
+with the entire frozen configuration, not merely an empty deviation list.
+Aggregation rejects mixed designs, result/config mismatches, duplicate seeds
+and unexpected seeds. Reduced-budget synthetic smoke runs are not Phase 0
+results. The fixed public ACS universe is standardised before the random
+membership draw; that defines a conditional membership experiment.
+
 Frozen before any Phase 0 result exists. Implemented by
 `research/study2_acs_slice.py`, `research/study2_phase0_natural_leakage.py` and
 `.github/workflows/study2-phase0-natural-leakage.yml`.

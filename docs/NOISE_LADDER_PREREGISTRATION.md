@@ -116,6 +116,13 @@ train acc − test acc   >= 0.03
 
 ## Pre-registered subgroup rule
 
+**Post-result correctness correction, 2026-09-30:** the historical rule below
+is superseded. Membership permutation tests no within-group association, not
+equal subgroup leakage under nonzero leakage. The implementation now withholds
+confirmatory subgroup verdicts and retains descriptive contrasts. This changes
+no aggregate detection criterion and does not reopen the failed insurance
+follow-up gate. See [publication status](PUBLICATION_STATUS.md).
+
 The **signed contrast** `male TPR@1% − female TPR@1%` is the only inferential
 subgroup statistic. A disparity is `SUPPORTED` only when all of:
 
