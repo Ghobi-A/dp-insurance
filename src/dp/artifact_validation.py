@@ -28,8 +28,17 @@ def _same_table(actual, expected, keys):
     actual = actual.sort_values(keys).reset_index(drop=True)[expected.columns]
     expected = expected.sort_values(keys).reset_index(drop=True)
     try:
-        pd.testing.assert_frame_equal(actual, expected, check_dtype=False,
-                                      check_exact=False, rtol=1e-12, atol=1e-12)
+        # CSV and in-memory summaries represent abstentions with different
+        # null scalars (NaN/None/pd.NA), especially after pandas 3 concatenation.
+        # Require identical missingness, then compare every nonmissing value.
+        pd.testing.assert_frame_equal(actual.isna(), expected.isna())
+        for column in expected:
+            present = expected[column].notna()
+            pd.testing.assert_series_equal(
+                actual.loc[present, column].reset_index(drop=True),
+                expected.loc[present, column].reset_index(drop=True),
+                check_dtype=False, check_exact=False, rtol=1e-12, atol=1e-12,
+            )
     except AssertionError as error:
         raise ValueError('derived summary differs from decisions') from error
 

@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from dp.artifact_validation import verify_run
+from dp.artifact_validation import _same_table, verify_run
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'src/dp'
@@ -38,3 +38,19 @@ def test_saved_evidence_rejects_corruption(tmp_path, corruption):
     rows.to_csv(path, index=False)
     with pytest.raises(ValueError):
         verify_run(folder, SOURCE)
+
+
+@pytest.mark.parametrize('missing', [None, float('nan'), pd.NA])
+def test_summary_null_representations_preserve_missingness_and_numeric_checks(missing):
+    actual = pd.DataFrame({'policy': ['a', 'b'], 'failure': [float('nan'), .125]})
+    expected = pd.DataFrame({'policy': ['a', 'b'],
+                             'failure': pd.Series([missing, .125], dtype=object)})
+    _same_table(actual, expected, ['policy'])
+    wrong_missingness = actual.copy()
+    wrong_missingness.loc[0, 'failure'] = 0.
+    with pytest.raises(ValueError, match='summary differs'):
+        _same_table(wrong_missingness, expected, ['policy'])
+    wrong_value = actual.copy()
+    wrong_value.loc[1, 'failure'] = .25
+    with pytest.raises(ValueError, match='summary differs'):
+        _same_table(wrong_value, expected, ['policy'])

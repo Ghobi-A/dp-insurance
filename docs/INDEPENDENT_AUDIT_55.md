@@ -89,3 +89,15 @@ remaining primary-source literature followups; final anonymous packaging.
 The historical insurance PDF remains superseded. The ACS manuscript/PDF's
 scientific conclusions were not strengthened by this review. No merge,
 submission, real Phase 0 run or new ACS tuning experiment was performed.
+
+## Final CI compatibility correction — 17 October 2026
+
+Final-head CI exposed a pandas 3 compatibility bug in the new validator:
+concatenated all-abstention summaries retain `None`, whereas CSV parses them
+as `NaN`. Pandas 2's testing helper accepted them as equivalent; pandas 3
+rejected them. The checker now requires identical missing-value masks and
+compares every nonmissing value at the existing numeric tolerance. Regression
+tests cover None/NaN/pd.NA and reject both a changed null position and a
+changed numeric value. No saved experiment or scientific result is changed.
+PR #54 passed every final-head workflow and was merged first. PR #55 is
+retargeted to main; its final corrected head must pass CI before merging.
