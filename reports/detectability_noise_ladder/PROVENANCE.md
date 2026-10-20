@@ -40,7 +40,10 @@ the split, cohort and shadow-schedule hashes exactly but gave offline AUC
 the experimental design, not the floating-point trajectory across torch builds.
 The difference is about 0.9 null standard deviations of a seed AUC, so a binary
 rule placed close to its threshold (epsilon 8 mean 0.5503 against 0.55) is not
-robust to the numerical environment.
+robust to the numerical environment. By contrast, retraining the epsilon-8
+point for seed 42 in the same review environment gave offline AUC 0.5791
+(recorded 0.5792), permutation p 0.0020 (recorded 0.0020) and identical
+achieved epsilon, so the divergence is specific to the long non-private run.
 
 Read `noise_ladder.md` with the review caveats in
 [`docs/STATISTICAL_REVIEW.md`](../../docs/STATISTICAL_REVIEW.md): the frozen

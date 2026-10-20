@@ -186,7 +186,7 @@ reimplementation reproduces all six recorded ladder decisions and agrees with
 | Ladder achieved ε | Opacus RDP replay at executed q = 1/14, T = 5600 | 31.0307, 15.5427, 7.7749, 3.8939, 1.9432: exact |
 | Ladder decisions | `python research/detectability_noise_ladder.py aggregate --input-dir <downloaded points> --output-dir <fresh>` | All six decisions and the frontier text reproduced |
 | Ladder non-private, seed 42, retrain | `python research/detectability_noise_ladder.py point --seeds 42 --output-dir <fresh>` | Hashes identical; AUC 0.6078 vs 0.5859 (environment difference, §5) |
-| Ladder ε=8, seed 42, retrain | `python research/detectability_noise_ladder.py point --epsilon 8 --seeds 42 --output-dir <fresh>` | See PR description |
+| Ladder ε=8, seed 42, retrain | `python research/detectability_noise_ladder.py point --epsilon 8 --seeds 42 --output-dir <fresh>` | Achieved ε 7.7749, AUC gap −0.0059, offline AUC 0.5791 vs 0.5792, permutation p 0.0020 vs 0.0020: reproduced to within 1e-4 across environments. The persistent seed-42 signal at finite ε is not a CI artefact |
 
 ## 8. Severity-ranked findings
 
