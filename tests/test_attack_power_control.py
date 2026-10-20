@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -589,14 +590,63 @@ def test_report_includes_permutation_results_and_separate_conclusions():
     assert "Is aggregate membership leakage detectable?" in markdown
     assert "Does subgroup leakage differ by sex?" in markdown
     assert "still suitable for the iso-epsilon" in markdown
-    # Aggregate detection must not be reported as subgroup disparity.
-    assert apc.SUBGROUP_UNSUPPORTED in markdown
+    # Aggregate detection must not be reported as subgroup disparity, and a
+    # historical UNSUPPORTED label is rendered as superseded, never as a verdict.
+    assert f"**{apc.SUBGROUP_UNSUPPORTED}**" not in markdown
+    assert f"Historical label '{apc.SUBGROUP_UNSUPPORTED}' superseded" in markdown
+    assert "Not established in either direction" in markdown
     assert "CONDITIONAL GO" in markdown
+    # A non-private positive control must not be presented as DP-SGD power.
+    assert "informative about the DP-SGD configurations" not in markdown
+    assert "remains power-limited" in markdown
 
     rows = apc.build_rows(payload)
     assert all("permutation_p_aggregate_auc" in row for row in rows)
     assert all("permutation_p_signed_difference" in row for row in rows)
     assert all("female_permutation_p" in row for row in rows)
+
+
+@pytest.mark.parametrize(
+    "historical", [apc.SUBGROUP_SUPPORTED, apc.SUBGROUP_UNSUPPORTED]
+)
+def test_historical_subgroup_labels_are_reported_as_inconclusive(historical):
+    verdict, basis = apc.reported_subgroup_verdict(
+        {"subgroup_verdict": historical, "subgroup_basis": "old basis"}
+    )
+    assert verdict == apc.SUBGROUP_INCONCLUSIVE
+    assert "superseded" in basis and "old basis" in basis
+    current = {"subgroup_verdict": apc.SUBGROUP_INCONCLUSIVE, "subgroup_basis": "b"}
+    assert apc.reported_subgroup_verdict(current) == (apc.SUBGROUP_INCONCLUSIVE, "b")
+
+
+def test_render_only_rewrites_markdown_from_saved_json(tmp_path):
+    control = apc.CONTROLS[1]
+    seed_results = [
+        _seed_result(control, seed, auc=0.80, ci_low=0.20, signed=0.02, signed_p=0.4)
+        for seed in (42, 43, 44)
+    ]
+    decisions = [
+        {
+            "control": control.name,
+            "positive_control": True,
+            "seeds_attacked": 3,
+            "mean_auc_gap": 0.15,
+            "mean_lira_auc": 0.80,
+            "mean_permutation_p_auc": 0.001,
+            "verdict": apc.DETECTS,
+            "basis": "permutation null rejected on 3/3 seeds",
+            "subgroup_verdict": apc.SUBGROUP_UNSUPPORTED,
+            "subgroup_basis": "signed direction not stable",
+        }
+    ]
+    payload = _payload(seed_results, decisions)
+    payload["permutation_reps"] = 50
+    saved = json.dumps(payload, default=float)
+    (tmp_path / "attack_power_control.json").write_text(saved)
+    apc.main(["--render-only", "--output-dir", str(tmp_path)])
+    assert (tmp_path / "attack_power_control.json").read_text() == saved
+    markdown = (tmp_path / "attack_power_control.md").read_text()
+    assert "superseded" in markdown
 
 
 @pytest.mark.slow

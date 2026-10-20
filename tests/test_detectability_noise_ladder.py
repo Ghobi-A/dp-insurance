@@ -169,6 +169,38 @@ def test_achieved_epsilon_decreases_as_noise_increases():
     assert all(b < a for a, b in zip(epsilons, epsilons[1:]))
 
 
+def test_runtime_versions_record_numerical_environment():
+    versions = ladder.runtime_versions()
+    assert versions["python"].count(".") == 2
+    assert {"numpy", "torch", "opacus", "scikit-learn", "pandas"} <= set(versions)
+    assert versions["numpy"] == np.__version__
+
+
+def test_accountant_cross_check_replays_the_executed_mechanism():
+    """Regression: the RDP replay must use Opacus's executed q = 1/len(loader).
+
+    With n=856 and batch 64 the calibration rate 64/856 differs from the
+    executed Poisson rate 1/14; replaying the calibration rate reported an
+    epsilon above the request (32.96 for a requested 32, achieved 31.03).
+    """
+    pytest.importorskip("torch")
+    pytest.importorskip("opacus")
+    rng = np.random.default_rng(0)
+    n = 856
+    X = rng.standard_normal((n, 4)).astype(np.float32)
+    y = (rng.random(n) < 0.5).astype(np.float32)
+    calibration_rate = 64 / n
+    noise = ladder.solve_noise_multiplier(8.0, calibration_rate, epochs=1)
+    _, meta = ladder.train_ladder_model(X, y, noise, seed=0, epochs=1)
+
+    assert meta["steps"] == 14
+    assert meta["sample_rate"] == pytest.approx(1 / 14)
+    replay = ladder.epsilon_for_noise(noise, meta["sample_rate"], meta["steps"])
+    assert replay == pytest.approx(meta["achieved_epsilon"], rel=1e-9)
+    stale = ladder.epsilon_for_noise(noise, calibration_rate, meta["steps"])
+    assert stale > meta["achieved_epsilon"]
+
+
 # --------------------------------------------------------------------------- #
 # Fixtures for decision logic
 # --------------------------------------------------------------------------- #

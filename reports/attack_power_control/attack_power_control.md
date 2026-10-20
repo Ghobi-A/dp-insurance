@@ -1,5 +1,7 @@
 # Attack-power control experiment
 
+> Subgroup contrasts are descriptive. Membership-permutation p-values test no within-group association, not equal subgroup leakage.
+
 ## 1. Experimental design
 
 Task: `high_cost`. Sensitive attribute: `sex`.
@@ -172,9 +174,9 @@ Subgroup disparity is judged separately; an aggregate detection is never carried
 
 | Control | Subgroup verdict | Basis |
 |---|---|---|
-| matched_capacity_mlp | **SUBGROUP DISPARITY UNSUPPORTED** | The permutation null is rejected on only 0/2 seeds; at least one gap is within the 0.0078 discrete operating-point resolution. |
-| memorising_mlp | **SUBGROUP DISPARITY UNSUPPORTED** | The signed direction is not stable across seeds; the permutation null is rejected on only 1/3 seeds; at least one gap is within the 0.0078 discrete operating-point resolution. |
-| unbounded_decision_tree | **SUBGROUP DISPARITY UNSUPPORTED** | The permutation null is rejected on only 1/3 seeds; at least one gap is within the 0.0078 discrete operating-point resolution. |
+| matched_capacity_mlp | **SUBGROUP DISPARITY INCONCLUSIVE** | Historical label 'SUBGROUP DISPARITY UNSUPPORTED' superseded: it was derived from membership-permutation p-values, which do not test equal leakage between groups. Original basis (descriptive only): The permutation null is rejected on only 0/2 seeds; at least one gap is within the 0.0078 discrete operating-point resolution. |
+| memorising_mlp | **SUBGROUP DISPARITY INCONCLUSIVE** | Historical label 'SUBGROUP DISPARITY UNSUPPORTED' superseded: it was derived from membership-permutation p-values, which do not test equal leakage between groups. Original basis (descriptive only): The signed direction is not stable across seeds; the permutation null is rejected on only 1/3 seeds; at least one gap is within the 0.0078 discrete operating-point resolution. |
+| unbounded_decision_tree | **SUBGROUP DISPARITY INCONCLUSIVE** | Historical label 'SUBGROUP DISPARITY UNSUPPORTED' superseded: it was derived from membership-permutation p-values, which do not test equal leakage between groups. Original basis (descriptive only): The permutation null is rejected on only 1/3 seeds; at least one gap is within the 0.0078 discrete operating-point resolution. |
 
 ## Conclusions
 
@@ -186,12 +188,12 @@ Yes, on: memorising_mlp, unbounded_decision_tree. Mean aggregate LiRA AUC clears
 
 ### 2. Does subgroup leakage differ by sex?
 
-Not supported. No control satisfies all three requirements (stable signed direction across seeds, permutation rejection on at least 2 seeds, and a gap exceeding the operating-point resolution). Where an aggregate attack does succeed, that success is reported as aggregate leakage only.
+Not established in either direction. The within-group membership permutation tests no score-membership association; it does not test equal leakage when both groups leak, so its signed-difference and gap p-values cannot support a disparity or an equality claim. Subgroup contrasts above are descriptive.
 
 ### 3. Is the insurance dataset still suitable for the iso-epsilon subgroup research question?
 
-Partially. The pipeline has measurable aggregate attack power at non-private capacity, so the powered spike's null is informative about the DP-SGD configurations rather than about a dead attack. But the subgroup contrast -- the actual research question -- is not resolvable here: subgroup TPR@1% FPR moves in units of one member, so the cohort is too small to separate a real disparity from operating-point resolution.
+Partially. The attack detects aggregate leakage from deliberately memorising, non-private targets (mean offline AUC 0.57-0.60). That is a positive control for leakage of this size only; it does not establish power against the smaller effects expected under DP-SGD, so a DP-SGD null from this pipeline remains power-limited rather than informative about absence of leakage. The subgroup contrast -- the actual research question -- is not resolvable here: subgroup TPR@1% FPR moves in units of one member, and no valid equal-leakage test has been specified.
 
-Go/no-go: **CONDITIONAL GO** -- aggregate auditing on the insurance dataset is sound, but the iso-epsilon *subgroup* comparison needs a larger dataset to reach usable resolution.
+Go/no-go: **CONDITIONAL GO** -- aggregate auditing of strongly memorising targets is feasible on the insurance dataset, but the iso-epsilon *subgroup* comparison needs a larger dataset and a valid disparity test.
 
-Attack AUC near 0.5 is reported here as a failure of attack power, not as evidence of privacy. No claim of subgroup privacy variance is made unless section 2 above explicitly supports it.
+Attack AUC near 0.5 is reported here as a failure of attack power, not as evidence of privacy. No claim of subgroup privacy variance is made.
