@@ -1,0 +1,214 @@
+{
+  "description": "Operating characteristics of the frozen ladder aggregate rule under an equal-variance binormal score model (independent review simulation).",
+  "assumptions": [
+    "binormal equal-variance scores; 256 members and 256 non-members per seed",
+    "three independent seeds; points simulated independently within seed",
+    "normal approximation to the 1000-replicate permutation p-value",
+    "Holm across six ladder points within seed; non-private true AUC 0.575",
+    "tau = SD of true per-seed AUC around the point mean"
+  ],
+  "simulation_seed": 20261020,
+  "sims_per_cell": 4000,
+  "results": [
+    {
+      "finite_auc": 0.5,
+      "tau": 0.0,
+      "sims": 4000,
+      "frozen_rule_rate": 0.0,
+      "frozen_rule_mc_se": 0.0,
+      "seed_holm_rejection_rate": 0.009166666666666667,
+      "mean_criterion_rate": 0.0,
+      "pooled_stouffer_rate": 0.00925
+    },
+    {
+      "finite_auc": 0.52,
+      "tau": 0.0,
+      "sims": 4000,
+      "frozen_rule_rate": 0.00275,
+      "frozen_rule_mc_se": 0.0008280153229258501,
+      "seed_holm_rejection_rate": 0.0535,
+      "mean_criterion_rate": 0.019,
+      "pooled_stouffer_rate": 0.1905
+    },
+    {
+      "finite_auc": 0.53,
+      "tau": 0.0,
+      "sims": 4000,
+      "frozen_rule_rate": 0.037,
+      "frozen_rule_mc_se": 0.002984585398342624,
+      "seed_holm_rejection_rate": 0.12825,
+      "mean_criterion_rate": 0.091,
+      "pooled_stouffer_rate": 0.474
+    },
+    {
+      "finite_auc": 0.54,
+      "tau": 0.0,
+      "sims": 4000,
+      "frozen_rule_rate": 0.115,
+      "frozen_rule_mc_se": 0.005044179814399959,
+      "seed_holm_rejection_rate": 0.23183333333333334,
+      "mean_criterion_rate": 0.25,
+      "pooled_stouffer_rate": 0.77925
+    },
+    {
+      "finite_auc": 0.55,
+      "tau": 0.0,
+      "sims": 4000,
+      "frozen_rule_rate": 0.31725,
+      "frozen_rule_mc_se": 0.007358709762927193,
+      "seed_holm_rejection_rate": 0.39558333333333334,
+      "mean_criterion_rate": 0.50875,
+      "pooled_stouffer_rate": 0.9505
+    },
+    {
+      "finite_auc": 0.56,
+      "tau": 0.0,
+      "sims": 4000,
+      "frozen_rule_rate": 0.6155,
+      "frozen_rule_mc_se": 0.0076918747714715165,
+      "seed_holm_rejection_rate": 0.5975,
+      "mean_criterion_rate": 0.75475,
+      "pooled_stouffer_rate": 0.991
+    },
+    {
+      "finite_auc": 0.57,
+      "tau": 0.0,
+      "sims": 4000,
+      "frozen_rule_rate": 0.84675,
+      "frozen_rule_mc_se": 0.005695709734089335,
+      "seed_holm_rejection_rate": 0.77975,
+      "mean_criterion_rate": 0.91325,
+      "pooled_stouffer_rate": 0.99925
+    },
+    {
+      "finite_auc": 0.58,
+      "tau": 0.0,
+      "sims": 4000,
+      "frozen_rule_rate": 0.96225,
+      "frozen_rule_mc_se": 0.0030135086485689713,
+      "seed_holm_rejection_rate": 0.896,
+      "mean_criterion_rate": 0.983,
+      "pooled_stouffer_rate": 1.0
+    },
+    {
+      "finite_auc": 0.6,
+      "tau": 0.0,
+      "sims": 4000,
+      "frozen_rule_rate": 0.9995,
+      "frozen_rule_mc_se": 0.00035346499119429955,
+      "seed_holm_rejection_rate": 0.98525,
+      "mean_criterion_rate": 0.99975,
+      "pooled_stouffer_rate": 1.0
+    },
+    {
+      "finite_auc": 0.62,
+      "tau": 0.0,
+      "sims": 4000,
+      "frozen_rule_rate": 1.0,
+      "frozen_rule_mc_se": 0.0,
+      "seed_holm_rejection_rate": 0.9993333333333333,
+      "mean_criterion_rate": 1.0,
+      "pooled_stouffer_rate": 1.0
+    },
+    {
+      "finite_auc": 0.5,
+      "tau": 0.02,
+      "sims": 4000,
+      "frozen_rule_rate": 0.00075,
+      "frozen_rule_mc_se": 0.00043285029167138147,
+      "seed_holm_rejection_rate": 0.030916666666666665,
+      "mean_criterion_rate": 0.00375,
+      "pooled_stouffer_rate": 0.032
+    },
+    {
+      "finite_auc": 0.52,
+      "tau": 0.02,
+      "sims": 4000,
+      "frozen_rule_rate": 0.01875,
+      "frozen_rule_mc_se": 0.002144669992096686,
+      "seed_holm_rejection_rate": 0.1085,
+      "mean_criterion_rate": 0.051,
+      "pooled_stouffer_rate": 0.241
+    },
+    {
+      "finite_auc": 0.53,
+      "tau": 0.02,
+      "sims": 4000,
+      "frozen_rule_rate": 0.064,
+      "frozen_rule_mc_se": 0.003869883719183304,
+      "seed_holm_rejection_rate": 0.18416666666666667,
+      "mean_criterion_rate": 0.14075,
+      "pooled_stouffer_rate": 0.4795
+    },
+    {
+      "finite_auc": 0.54,
+      "tau": 0.02,
+      "sims": 4000,
+      "frozen_rule_rate": 0.162,
+      "frozen_rule_mc_se": 0.005825718839765613,
+      "seed_holm_rejection_rate": 0.2935,
+      "mean_criterion_rate": 0.29825,
+      "pooled_stouffer_rate": 0.72775
+    },
+    {
+      "finite_auc": 0.55,
+      "tau": 0.02,
+      "sims": 4000,
+      "frozen_rule_rate": 0.33225,
+      "frozen_rule_mc_se": 0.007447481747208247,
+      "seed_holm_rejection_rate": 0.4230833333333333,
+      "mean_criterion_rate": 0.49775,
+      "pooled_stouffer_rate": 0.8865
+    },
+    {
+      "finite_auc": 0.56,
+      "tau": 0.02,
+      "sims": 4000,
+      "frozen_rule_rate": 0.54925,
+      "frozen_rule_mc_se": 0.007867249161873546,
+      "seed_holm_rejection_rate": 0.572,
+      "mean_criterion_rate": 0.70475,
+      "pooled_stouffer_rate": 0.9655
+    },
+    {
+      "finite_auc": 0.57,
+      "tau": 0.02,
+      "sims": 4000,
+      "frozen_rule_rate": 0.75975,
+      "frozen_rule_mc_se": 0.006755182038627826,
+      "seed_holm_rejection_rate": 0.7144166666666667,
+      "mean_criterion_rate": 0.8645,
+      "pooled_stouffer_rate": 0.99275
+    },
+    {
+      "finite_auc": 0.58,
+      "tau": 0.02,
+      "sims": 4000,
+      "frozen_rule_rate": 0.88975,
+      "frozen_rule_mc_se": 0.004952144421864127,
+      "seed_holm_rejection_rate": 0.8245833333333333,
+      "mean_criterion_rate": 0.94825,
+      "pooled_stouffer_rate": 0.99925
+    },
+    {
+      "finite_auc": 0.6,
+      "tau": 0.02,
+      "sims": 4000,
+      "frozen_rule_rate": 0.98625,
+      "frozen_rule_mc_se": 0.001841258910365408,
+      "seed_holm_rejection_rate": 0.9505,
+      "mean_criterion_rate": 0.995,
+      "pooled_stouffer_rate": 0.99975
+    },
+    {
+      "finite_auc": 0.62,
+      "tau": 0.02,
+      "sims": 4000,
+      "frozen_rule_rate": 0.99925,
+      "frozen_rule_mc_se": 0.00043285029167138965,
+      "seed_holm_rejection_rate": 0.9896666666666667,
+      "mean_criterion_rate": 0.99975,
+      "pooled_stouffer_rate": 1.0
+    }
+  ]
+}

@@ -648,6 +648,25 @@ def assess_subgroup_disparity(seed_results: Sequence[dict[str, object]]) -> tupl
     )
 
 
+def reported_subgroup_verdict(decision: dict[str, object]) -> tuple[str, str]:
+    """Subgroup verdict for reports, superseding historical confirmatory labels.
+
+    Artifacts written before the inference correction carry SUPPORTED or
+    UNSUPPORTED verdicts derived from membership-permutation p-values. Those
+    labels are not valid disparity or equality conclusions, so reports render
+    them as inconclusive and name the superseded label rather than repeat it.
+    """
+    verdict = str(decision.get("subgroup_verdict", SUBGROUP_INCONCLUSIVE))
+    basis = str(decision.get("subgroup_basis", "-"))
+    if verdict in (SUBGROUP_SUPPORTED, SUBGROUP_UNSUPPORTED):
+        return SUBGROUP_INCONCLUSIVE, (
+            f"Historical label '{verdict}' superseded: it was derived from membership-"
+            "permutation p-values, which do not test equal leakage between groups. "
+            f"Original basis (descriptive only): {basis}"
+        )
+    return verdict, basis
+
+
 def build_mlp(n_features: int, hidden_units: Sequence[int], seed: int):
     """Build a plain feed-forward classifier with ReLU activations."""
     import torch
@@ -1329,16 +1348,11 @@ def render_markdown(payload: dict[str, object]) -> str:
         "|---|---|---|",
     ]
     for decision in payload["decisions"]:
-        lines.append(
-            f"| {decision['control']} | **{decision.get('subgroup_verdict', SUBGROUP_INCONCLUSIVE)}** "
-            f"| {decision.get('subgroup_basis', '-')} |"
-        )
+        verdict, basis = reported_subgroup_verdict(decision)
+        lines.append(f"| {decision['control']} | **{verdict}** | {basis} |")
 
     failed = [d for d in payload["decisions"] if d["verdict"] == FAILS_POSITIVE_CONTROL]
     detected = [d for d in payload["decisions"] if d["verdict"] == DETECTS]
-    supported = [
-        d for d in payload["decisions"] if d.get("subgroup_verdict") == SUBGROUP_SUPPORTED
-    ]
 
     lines += [
         "",
@@ -1370,22 +1384,15 @@ def render_markdown(payload: dict[str, object]) -> str:
             "consistent rejection of the permutation null."
         )
 
-    lines += ["", "### 2. Does subgroup leakage differ by sex?", ""]
-    if supported:
-        names = ", ".join(d["control"] for d in supported)
-        lines.append(
-            f"Supported on: {names} -- stable signed direction across seeds, "
-            f"permutation p<{ALPHA} on at least {MIN_SIGNIFICANT_SEEDS} seeds, and an "
-            "effect larger than the discrete operating-point resolution."
-        )
-    else:
-        lines.append(
-            "Not supported. No control satisfies all three requirements (stable signed "
-            "direction across seeds, permutation rejection on at least "
-            f"{MIN_SIGNIFICANT_SEEDS} seeds, and a gap exceeding the operating-point "
-            "resolution). Where an aggregate attack does succeed, that success is "
-            "reported as aggregate leakage only."
-        )
+    lines += [
+        "",
+        "### 2. Does subgroup leakage differ by sex?",
+        "",
+        "Not established in either direction. The within-group membership permutation "
+        "tests no score-membership association; it does not test equal leakage when "
+        "both groups leak, so its signed-difference and gap p-values cannot support a "
+        "disparity or an equality claim. Subgroup contrasts above are descriptive.",
+    ]
 
     lines += ["", "### 3. Is the insurance dataset still suitable for the iso-epsilon "
               "subgroup research question?", ""]
@@ -1401,27 +1408,22 @@ def render_markdown(payload: dict[str, object]) -> str:
             "attributed to differential privacy, because the same pipeline fails "
             "against an unprotected, demonstrably memorising target.",
         ]
-    elif detected and not supported:
+    elif detected:
+        detected_aucs = [float(d["mean_lira_auc"]) for d in detected]
         lines += [
-            "Partially. The pipeline has measurable aggregate attack power at "
-            "non-private capacity, so the powered spike's null is informative about "
-            "the DP-SGD configurations rather than about a dead attack. But the "
-            "subgroup contrast -- the actual research question -- is not resolvable "
-            "here: subgroup TPR@1% FPR moves in units of one member, so the cohort is "
-            "too small to separate a real disparity from operating-point resolution.",
+            "Partially. The attack detects aggregate leakage from deliberately "
+            "memorising, non-private targets (mean offline AUC "
+            f"{min(detected_aucs):.2f}-{max(detected_aucs):.2f}). That "
+            "is a positive control for leakage of this size only; it does not establish "
+            "power against the smaller effects expected under DP-SGD, so a DP-SGD null "
+            "from this pipeline remains power-limited rather than informative about "
+            "absence of leakage. The subgroup contrast -- the actual research question "
+            "-- is not resolvable here: subgroup TPR@1% FPR moves in units of one "
+            "member, and no valid equal-leakage test has been specified.",
             "",
-            "Go/no-go: **CONDITIONAL GO** -- aggregate auditing on the insurance "
-            "dataset is sound, but the iso-epsilon *subgroup* comparison needs a "
-            "larger dataset to reach usable resolution.",
-        ]
-    elif detected and supported:
-        lines += [
-            "Yes. The pipeline detects aggregate leakage and a stable subgroup "
-            "disparity at non-private capacity, so the dataset can in principle "
-            "support the iso-epsilon subgroup comparison.",
-            "",
-            "Go/no-go: **GO** -- subgroup DP work on this dataset remains "
-            "interpretable.",
+            "Go/no-go: **CONDITIONAL GO** -- aggregate auditing of strongly memorising "
+            "targets is feasible on the insurance dataset, but the iso-epsilon *subgroup* "
+            "comparison needs a larger dataset and a valid disparity test.",
         ]
     else:
         lines += [
@@ -1435,8 +1437,7 @@ def render_markdown(payload: dict[str, object]) -> str:
     lines += [
         "",
         "Attack AUC near 0.5 is reported here as a failure of attack power, not as "
-        "evidence of privacy. No claim of subgroup privacy variance is made unless "
-        "section 2 above explicitly supports it.",
+        "evidence of privacy. No claim of subgroup privacy variance is made.",
     ]
     return "\n".join(lines) + "\n"
 
@@ -1459,7 +1460,21 @@ def main(argv: Sequence[str] | None = None) -> None:
         default=[control.name for control in CONTROLS],
         help="Subset of control names to run.",
     )
+    parser.add_argument(
+        "--render-only",
+        action="store_true",
+        help="Re-render attack_power_control.md from the saved JSON without training.",
+    )
     args = parser.parse_args(argv)
+
+    if args.render_only:
+        root = Path(__file__).resolve().parents[1]
+        output_dir = Path(args.output_dir)
+        if not output_dir.is_absolute():
+            output_dir = root / output_dir
+        saved = json.loads((output_dir / "attack_power_control.json").read_text())
+        (output_dir / "attack_power_control.md").write_text(render_markdown(saved))
+        return None
 
     if args.shadows < DEFAULT_SHADOWS:
         raise ValueError(f"Use at least {DEFAULT_SHADOWS} shadows.")

@@ -263,14 +263,20 @@ def train_ladder_model(
         )
 
     model.train()
+    steps = 0
     for _ in range(epochs):
         for xb, yb in loader:
             optimizer.zero_grad()
             loss = loss_fn(model(xb).squeeze(-1), yb)
             loss.backward()
             optimizer.step()
+            steps += 1
 
+    metadata["steps"] = int(steps)
     if engine is not None:
+        # Opacus's Poisson loader uses q = 1 / len(loader), which can differ from
+        # batch_size / n used to solve the noise multiplier; record what ran.
+        metadata["sample_rate"] = float(loader.sample_rate)
         metadata["achieved_epsilon"] = float(engine.get_epsilon(DELTA))
     return model, metadata
 
@@ -727,7 +733,6 @@ def run_seed(
     attack_idx, cohort_counts = make_equalised_attack_cohort(groups_attack, membership, seed)
 
     sample_rate = min(BATCH_SIZE, len(y_train)) / len(y_train)
-    steps = epochs * int(np.ceil(len(y_train) / min(BATCH_SIZE, len(y_train))))
     noise_multiplier = None
     if requested_epsilon is not None:
         noise_multiplier = solve_noise_multiplier(
@@ -757,11 +762,23 @@ def run_seed(
         "sampling": "poisson" if requested_epsilon is not None else None,
         "noise_multiplier": noise_multiplier,
         "achieved_epsilon": target_meta["achieved_epsilon"],
+        # Independent RDP replay of the mechanism that actually ran. The
+        # calibration rate `sample_rate` (batch / n) solved the noise multiplier;
+        # Opacus then sampled at 1 / len(loader), so replaying the calibration
+        # rate would overstate epsilon.
         "accountant_epsilon": (
-            epsilon_for_noise(noise_multiplier, sample_rate, steps, DELTA)
+            epsilon_for_noise(
+                noise_multiplier,
+                float(target_meta["sample_rate"]),
+                int(target_meta["steps"]),
+                DELTA,
+            )
             if noise_multiplier is not None
             else None
         ),
+        "calibration_sample_rate": sample_rate if noise_multiplier is not None else None,
+        "executed_sample_rate": target_meta.get("sample_rate"),
+        "executed_steps": int(target_meta["steps"]),
         "max_grad_norm": MAX_GRAD_NORM if requested_epsilon is not None else None,
         "epochs": epochs,
         "batch_size": BATCH_SIZE,
@@ -952,6 +969,28 @@ def run_seed(
     return result
 
 
+def runtime_versions() -> dict[str, str | None]:
+    """Interpreter and numerical library versions for the artifact.
+
+    Fixed seeds reproduce a run only within one numerical environment: 400
+    epochs of training amplify floating-point differences between torch
+    builds, so per-seed AUCs can move by about one null standard deviation.
+    """
+    import platform
+    from importlib import metadata
+
+    versions: dict[str, str | None] = {
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+    }
+    for package in ("numpy", "torch", "opacus", "scikit-learn", "pandas"):
+        try:
+            versions[package] = metadata.version(package)
+        except metadata.PackageNotFoundError:
+            versions[package] = None
+    return versions
+
+
 def run_point(args: argparse.Namespace) -> None:
     """Run every seed for a single ladder point and write its artifact."""
     import torch
@@ -1005,6 +1044,7 @@ def run_point(args: argparse.Namespace) -> None:
         "permutation_reps": int(args.permutation_reps),
         "epochs": int(args.epochs) if args.epochs is not None else EPOCHS,
         "smoke": bool(args.smoke),
+        "runtime": runtime_versions(),
         "seed_results": seed_results,
     }
     out_path = output_dir / f"{label}.json"

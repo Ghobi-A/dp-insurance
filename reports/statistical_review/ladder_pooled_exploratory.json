@@ -1,0 +1,124 @@
+{
+  "status": "exploratory, post hoc, not preregistered; frozen decisions unchanged",
+  "source": "reports/detectability_noise_ladder/noise_ladder.json",
+  "points": [
+    {
+      "label": "non-private",
+      "requested_epsilon": null,
+      "frozen_decision": "DETECTABLE WITH MEMORISATION",
+      "seed_aucs": [
+        0.5858612060546875,
+        0.5793897602307554,
+        0.5582498106170969
+      ],
+      "seed_z": [
+        3.361776912733466,
+        3.1205385189895254,
+        2.307314420347167
+      ],
+      "stouffer_z": 5.074695161169877,
+      "stouffer_p": 1.9405885260058458e-07,
+      "fisher_p": 4.433637666174863e-06
+    },
+    {
+      "label": "eps32",
+      "requested_epsilon": 32.0,
+      "frozen_decision": "UNDETECTABLE WITH LOW MEMORISATION",
+      "seed_aucs": [
+        0.5916976928710938,
+        0.525757166035695,
+        0.499402715459472
+      ],
+      "seed_z": [
+        3.590296491393596,
+        1.0124256392861284,
+        -0.02365884487538855
+      ],
+      "stouffer_z": 2.643723420695466,
+      "stouffer_p": 0.0040999814560740535,
+      "fisher_p": 0.004670988887797977,
+      "stouffer_p_holm_finite": 0.008199962912148107,
+      "fisher_p_holm_finite": 0.01401296666339393
+    },
+    {
+      "label": "eps16",
+      "requested_epsilon": 16.0,
+      "frozen_decision": "UNDETECTABLE WITH LOW MEMORISATION",
+      "seed_aucs": [
+        0.5875625610351562,
+        0.5340424253350159,
+        0.5100591457374279
+      ],
+      "seed_z": [
+        3.428391116708903,
+        1.338090696192687,
+        0.39844957040133255
+      ],
+      "stouffer_z": 2.981974524495889,
+      "stouffer_p": 0.0014319791476564358,
+      "fisher_p": 0.002045511521609805,
+      "stouffer_p_holm_finite": 0.005727916590625743,
+      "fisher_p_holm_finite": 0.00818204608643922
+    },
+    {
+      "label": "eps8",
+      "requested_epsilon": 8.0,
+      "frozen_decision": "UNDETECTABLE WITH LOW MEMORISATION",
+      "seed_aucs": [
+        0.57916259765625,
+        0.5479463373595337,
+        0.5238112580851932
+      ],
+      "seed_z": [
+        3.099502154480402,
+        1.8846056738300818,
+        0.943180047532189
+      ],
+      "stouffer_z": 3.4221212506821725,
+      "stouffer_p": 0.0003106729908444829,
+      "fisher_p": 0.0008527373830057541,
+      "stouffer_p_holm_finite": 0.0015533649542224146,
+      "fisher_p_holm_finite": 0.004263686915028771
+    },
+    {
+      "label": "eps4",
+      "requested_epsilon": 4.0,
+      "frozen_decision": "UNDETECTABLE WITH LOW MEMORISATION",
+      "seed_aucs": [
+        0.571533203125,
+        0.5288594435430563,
+        0.5288153371015675
+      ],
+      "seed_z": [
+        2.800783751003108,
+        1.1343655019356353,
+        1.1413950039881688
+      ],
+      "stouffer_z": 2.930944193289802,
+      "stouffer_p": 0.001689667416668832,
+      "fisher_p": 0.004687744612463691,
+      "stouffer_p_holm_finite": 0.005727916590625743,
+      "fisher_p_holm_finite": 0.01401296666339393
+    },
+    {
+      "label": "eps2",
+      "requested_epsilon": 2.0,
+      "frozen_decision": "UNDETECTABLE WITH LOW MEMORISATION",
+      "seed_aucs": [
+        0.54718017578125,
+        0.519770446487591,
+        0.5296165724608123
+      ],
+      "seed_z": [
+        1.847274607103586,
+        0.7771082772240002,
+        1.1731324788210051
+      ],
+      "stouffer_z": 2.1924965171655786,
+      "stouffer_p": 0.014171837151932591,
+      "fisher_p": 0.025343973563151965,
+      "stouffer_p_holm_finite": 0.014171837151932591,
+      "fisher_p_holm_finite": 0.025343973563151965
+    }
+  ]
+}

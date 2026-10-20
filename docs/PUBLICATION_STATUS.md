@@ -1,11 +1,21 @@
-# Publication correctness status — updated 2026-10-01
+# Publication correctness status — updated 2026-10-20
+
+**Independent statistical review (2026-10-20):** see
+[`STATISTICAL_REVIEW.md`](STATISTICAL_REVIEW.md). It reproduces the ACS
+artefacts, the synthetic primary contrast, the ladder's achieved ε and every
+ladder decision. It also finds the frozen ladder rule had 4–32% power at the
+observed finite-ε effect sizes; an exploratory, non-preregistered pooled-seed
+analysis rejects no-association at every finite ε. Read the completed ladder
+below as a low-power non-detection, not as absence of leakage. Per-seed ladder
+output is now archived in `reports/detectability_noise_ladder/`. Proposals
+needing human decision are in [`METHODOLOGICAL_PROPOSALS.md`](METHODOLOGICAL_PROPOSALS.md).
 
 **Current submission-gate update:** the utility-decision branch now includes
 the 840-fit independent ACS replication, 400-fit published AUTO-S comparison,
 fresh complete-family calibration, deeper targeted literature review and a
 TMLR-style review PDF. See the [supplementary findings](../reports/configuration_selection/FOLLOWUP_FINDINGS.md)
-and [claim/author review register](SUBMISSION_REVIEW.md). There are 372 passing
-applicable tests. The paper remains a descriptive replication candidate:
+and [claim/author review register](SUBMISSION_REVIEW.md). The applicable test
+suite passes. The paper remains a descriptive replication candidate:
 novelty and venue suitability are not confirmed, useful ACS certification is
 not established, and author/expert review is still required. Historical
 attack-branch requirements below remain separate from this utility paper.
@@ -86,7 +96,8 @@ Holm-adjusted aggregate p < 0.05 on at least two of three seeds. Epsilon 8
 meets the mean criterion but rejects on only one seed. No finite point passes;
 the insurance iso-epsilon follow-up must not run under this design.
 Non-detection does not demonstrate privacy, subgroup equality, or absence of
-leakage. The non-private endpoint also changes clipping and sampling relative
+leakage. Per-seed offline AUCs, Holm-adjusted p-values and per-example scores
+are archived in [`reports/detectability_noise_ladder/`](../reports/detectability_noise_ladder/PROVENANCE.md). The non-private endpoint also changes clipping and sampling relative
 to finite points, so it does not isolate a noise-only transition.
 
 ## Work required before a paper
