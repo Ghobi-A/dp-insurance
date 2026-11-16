@@ -17,6 +17,14 @@ manuscript, not the current benchmark or a submission-ready paper. See
 [`docs/PUBLICATION_STATUS.md`](docs/PUBLICATION_STATUS.md) for the corrected
 privacy boundary, completed ladder result, and remaining research requirements.
 
+**16 November prospective LiRA validation (real data):** [protocol](docs/LIRA_VALIDATION_PROTOCOL.md),
+[findings](docs/LIRA_VALIDATION_FINDINGS.md) and [generated results](reports/lira_validation/v1/RESULTS.md).
+576 models, 16 targets per condition. A literature-faithful offline LiRA did
+**not** beat the existing baseline at DP-SGD ε ≈ 8 (ΔAUC +0.0015, 95% CI
+[−0.0022, +0.0052]). A powered design did detect small aggregate leakage under
+DP-SGD at ε ≈ 8 and ε ≈ 2 (mean AUC 0.53, all within the formal guarantee).
+Low-FPR identification of individual members was not shown.
+
 **20 October independent statistical review:** [review report](docs/STATISTICAL_REVIEW.md),
 [methodological proposals](docs/METHODOLOGICAL_PROPOSALS.md) and a short
 [research case study](docs/CASE_STUDY.md). Headline numbers reproduce. The
