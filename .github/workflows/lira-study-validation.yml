@@ -1,0 +1,37 @@
+name: LiRA real-data study validation
+
+on:
+  push:
+    branches:
+      - review/lira-artifact-integrity-20261116
+  pull_request:
+    branches:
+      - claude/lira-real-data-validation
+    paths:
+      - "research/lira_real_data_study.py"
+      - "src/dp/lira_study.py"
+      - "tests/test_lira_study.py"
+      - ".github/workflows/lira-study-validation.yml"
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e ".[experimental,dev]"
+      - name: Lint changed modules and tests
+        run: |
+          ruff check research/lira_real_data_study.py src/dp/lira_study.py tests/test_lira_study.py
+      - name: Run LiRA design and checkpoint tests
+        run: |
+          python -m pytest -q tests/test_attacks.py tests/test_lira_variance_simulation.py tests/test_lira_study.py
