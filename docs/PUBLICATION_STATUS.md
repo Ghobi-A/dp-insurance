@@ -1,5 +1,13 @@
 # Publication correctness status — updated 2026-10-20
 
+**Prospective LiRA validation (2026-11-16):** a new, separately frozen study
+([protocol](LIRA_VALIDATION_PROTOCOL.md), [findings](LIRA_VALIDATION_FINDINGS.md))
+ran 576 models. Its primary endpoint was not met: the literature-faithful
+attack did not improve on the baseline at ε ≈ 8. Both attacks detected small
+aggregate leakage at ε ≈ 8 and ε ≈ 2 (mean AUC about 0.53), consistent with the
+formal guarantee. The completed ladder below is unchanged and keeps its
+recorded verdicts; the new study uses a different design and is not a rerun.
+
 **Independent statistical review (2026-10-20):** see
 [`STATISTICAL_REVIEW.md`](STATISTICAL_REVIEW.md). It reproduces the ACS
 artefacts, the synthetic primary contrast, the ladder's achieved ε and every

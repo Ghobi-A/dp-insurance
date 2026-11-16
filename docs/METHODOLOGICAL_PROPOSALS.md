@@ -6,6 +6,14 @@ amendment**, written before outcomes are seen. None may reinterpret or rerun a
 frozen confirmatory study under a changed rule. The owner (and ideally an
 external statistician) should decide which, if any, to pursue.
 
+**Status, 16 November 2026.** P1 and P2 were addressed by the prospective
+study in [`LIRA_VALIDATION_FINDINGS.md`](LIRA_VALIDATION_FINDINGS.md): a
+powered design detected residual leakage at ε ≈ 8 and ε ≈ 2, and the
+literature-faithful attack gave no measurable gain over the baseline. P3 was
+addressed by that study's clipping-only condition. P5 is partly addressed
+(versions recorded, not pinned). P4, P6 and P7 remain open; the findings list
+further steps.
+
 ## P1. A powered confirmatory test of residual aggregate leakage at finite ε
 
 *Motivation.* The frozen ladder rule has 4–32% power at the observed effect

@@ -13,4 +13,4 @@ __pycache__/
 MSc_Dissertation__Copy_*\(4\).pdf
 
 # Optionally ignore all PDFs (uncomment if needed)
-# *.pdf
+# *.pdf*.tmp.npz

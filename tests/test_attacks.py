@@ -218,3 +218,142 @@ def test_online_rejects_unknown_variant():
     target, membership, sin, sout = _online_fixture()
     with pytest.raises(ValueError, match="unknown variant"):
         lira_online_attack(target, membership, sin, sout, variant="not-a-variant")
+
+
+
+# --------------------------------------------------------------------------- #
+# Offline LiRA options: deterministic score checks, not performance claims
+# --------------------------------------------------------------------------- #
+
+_TARGET = np.array([0.10, 0.90, 0.40, 1.50])
+_MEMBERSHIP = np.array([1, 0, 1, 0])
+_SHADOW_OUT = np.array(
+    [
+        [0.50, 0.70, 0.90],
+        [0.80, 1.00, 1.20],
+        [0.20, 0.60, 0.40],
+        [1.00, 2.00, 3.00],
+    ]
+)
+
+
+def _logit(loss):
+    p = np.exp(-np.asarray(loss, dtype=float))
+    return np.log(p / (1 - p))
+
+
+def _expected_scores(statistic, variance):
+    """Independent re-derivation with explicit loops and no shared helpers."""
+    transform = _logit if statistic == "logit_confidence" else (lambda x: -np.asarray(x))
+    target, out = transform(_TARGET), transform(_SHADOW_OUT)
+    means = [row.sum() / len(row) for row in out]
+    variances = [
+        sum((v - m) ** 2 for v in row) / (len(row) - 1) for row, m in zip(out, means)
+    ]
+    if variance == "global":
+        sigmas = [np.sqrt(sum(variances) / len(variances))] * len(means)
+    else:
+        sigmas = [np.sqrt(v) for v in variances]
+    return np.array([(t - m) / s for t, m, s in zip(target, means, sigmas)])
+
+
+@pytest.mark.parametrize("statistic", ["raw_loss", "logit_confidence"])
+@pytest.mark.parametrize("variance", ["per_example", "global"])
+def test_offline_lira_scores_match_independent_calculation(statistic, variance):
+    result = lira_offline_attack(
+        _TARGET, _MEMBERSHIP, _SHADOW_OUT, statistic=statistic, variance=variance
+    )
+    np.testing.assert_allclose(result.scores, _expected_scores(statistic, variance), rtol=1e-12)
+    default = statistic == "raw_loss" and variance == "per_example"
+    expected_name = (
+        "lira-offline" if default else f"lira-offline[{statistic},{variance}-variance]"
+    )
+    assert result.method == expected_name
+
+
+def test_offline_lira_raw_per_example_hand_values():
+    """First example by hand: -(0.10 - 0.70) / 0.2 = 3.0."""
+    result = lira_offline_attack(_TARGET, _MEMBERSHIP, _SHADOW_OUT)
+    assert result.scores[0] == pytest.approx(3.0)
+    assert result.scores[3] == pytest.approx(0.5)
+
+
+def test_global_variance_pools_within_example_variance_only():
+    """Shifting each example's shadow mean must not change the pooled sigma."""
+    shifted = _SHADOW_OUT + np.array([[0.0], [5.0], [10.0], [20.0]])
+    target = _TARGET + np.array([0.0, 5.0, 10.0, 20.0])
+    base = lira_offline_attack(_TARGET, _MEMBERSHIP, _SHADOW_OUT, variance="global")
+    moved = lira_offline_attack(target, _MEMBERSHIP, shifted, variance="global")
+    np.testing.assert_allclose(moved.scores, base.scores, rtol=1e-10, atol=1e-10)
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_offline_lira_defaults_reproduce_historical_formula(seed):
+    rng = np.random.default_rng(seed)
+    n, k = 40 + 10 * seed, 3 + 4 * seed
+    target = rng.exponential(0.5, n)
+    shadow_out = rng.exponential(0.5, (n, k))
+    membership = np.arange(n) % 2
+    result = lira_offline_attack(target, membership, shadow_out)
+    mu, sd = shadow_out.mean(axis=1), shadow_out.std(axis=1, ddof=1)
+    np.testing.assert_allclose(result.scores, -(target - mu) / sd, rtol=1e-12)
+    assert result.method == "lira-offline"
+
+
+@pytest.mark.parametrize("bad", [{"statistic": "p"}, {"variance": "none"}])
+def test_offline_lira_rejects_unknown_options(bad):
+    with pytest.raises(ValueError, match="unknown"):
+        lira_offline_attack(_TARGET, _MEMBERSHIP, _SHADOW_OUT, **bad)
+
+
+def test_lira_rejects_nonfinite_and_malformed_inputs():
+    nan_target = _TARGET.copy()
+    nan_target[0] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        lira_offline_attack(nan_target, _MEMBERSHIP, _SHADOW_OUT)
+    inf_shadow = _SHADOW_OUT.copy()
+    inf_shadow[1, 1] = np.inf
+    with pytest.raises(ValueError, match="finite"):
+        lira_online_attack(_TARGET, _MEMBERSHIP, inf_shadow, _SHADOW_OUT)
+    with pytest.raises(ValueError, match="binary"):
+        lira_offline_attack(_TARGET, np.array([1, 0, 2, 0]), _SHADOW_OUT)
+    with pytest.raises(ValueError, match="both members"):
+        lira_offline_attack(_TARGET, np.ones(4, dtype=int), _SHADOW_OUT)
+    with pytest.raises(ValueError, match="1-D"):
+        lira_offline_attack(_TARGET.reshape(2, 2), _MEMBERSHIP, _SHADOW_OUT)
+    with pytest.raises(ValueError, match="1-D"):
+        lira_online_attack(_TARGET, _MEMBERSHIP.reshape(2, 2), _SHADOW_OUT, _SHADOW_OUT)
+
+
+def test_negative_losses_rejected_only_for_logit_statistics():
+    negative = _TARGET.copy()
+    negative[0] = -0.1
+    # Raw-loss scoring is a location-scale comparison and stays defined.
+    assert np.isfinite(lira_offline_attack(negative, _MEMBERSHIP, _SHADOW_OUT).scores).all()
+    with pytest.raises(ValueError, match="non-negative"):
+        lira_offline_attack(negative, _MEMBERSHIP, _SHADOW_OUT, statistic="logit_confidence")
+    with pytest.raises(ValueError, match="non-negative"):
+        lira_online_attack(
+            negative, _MEMBERSHIP, _SHADOW_OUT, _SHADOW_OUT, variant="online_logit_confidence"
+        )
+
+
+@pytest.mark.parametrize("statistic", ["raw_loss", "logit_confidence"])
+def test_saturated_shadows_stay_finite_and_pooling_bounds_the_scores(statistic):
+    """Clipped, identical shadow losses hit the sigma floor per example.
+
+    Per-example scores are then finite but astronomically large, which is the
+    numerical sensitivity pooling avoids: one saturated example no longer
+    dominates the ranking.
+    """
+    shadow_out = _SHADOW_OUT.copy()
+    shadow_out[0] = 0.0  # p = 1 on every shadow: identical after clipping
+    target = _TARGET.copy()
+    target[0] = 1e-9
+    per_example = lira_offline_attack(target, _MEMBERSHIP, shadow_out, statistic=statistic)
+    pooled = lira_offline_attack(
+        target, _MEMBERSHIP, shadow_out, statistic=statistic, variance="global"
+    )
+    assert np.isfinite(per_example.scores).all() and np.isfinite(pooled.scores).all()
+    assert abs(per_example.scores[0]) > 1e3
+    assert abs(pooled.scores[0]) < 100
