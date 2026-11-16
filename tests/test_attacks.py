@@ -218,3 +218,50 @@ def test_online_rejects_unknown_variant():
     target, membership, sin, sout = _online_fixture()
     with pytest.raises(ValueError, match="unknown variant"):
         lira_online_attack(target, membership, sin, sout, variant="not-a-variant")
+
+
+def _few_shadow_scenario(seed, n=600, k=11, shift=0.6):
+    """Homoscedastic Gaussian losses with only ``k`` OUT shadows per example."""
+    rng = np.random.default_rng(seed)
+    mu = rng.normal(1.0, 0.5, n)
+    membership = (rng.random(n) < 0.5).astype(int)
+    shadow_out = mu[:, None] + rng.normal(0, 0.3, (n, k))
+    target = mu + rng.normal(0, 0.3, n) - shift * 0.3 * membership
+    return np.abs(target), membership, np.abs(shadow_out)
+
+
+def test_offline_lira_defaults_are_unchanged_by_new_options():
+    target, membership, shadow_out = _few_shadow_scenario(0)
+    default = lira_offline_attack(target, membership, shadow_out)
+    mu, sd = shadow_out.mean(axis=1), shadow_out.std(axis=1, ddof=1)
+    np.testing.assert_allclose(default.scores, -(target - mu) / sd)
+    assert default.method == "lira-offline"
+
+
+def test_global_variance_helps_when_shadows_are_few():
+    """Carlini et al. §VI-A: pooled variance beats per-example at small k."""
+    per_example, pooled = [], []
+    for seed in range(20):
+        target, membership, shadow_out = _few_shadow_scenario(seed)
+        per_example.append(lira_offline_attack(target, membership, shadow_out).auc)
+        pooled.append(
+            lira_offline_attack(target, membership, shadow_out, variance="global").auc
+        )
+    assert np.mean(pooled) > np.mean(per_example)
+    assert sum(p > q for p, q in zip(pooled, per_example)) >= 15
+
+
+def test_offline_lira_logit_statistic_orients_scores_and_names_method():
+    target, membership, shadow_out = _few_shadow_scenario(1)
+    result = lira_offline_attack(
+        target, membership, shadow_out, statistic="logit_confidence", variance="global"
+    )
+    assert result.auc > 0.5
+    assert result.method == "lira-offline[logit_confidence,global-variance]"
+
+
+@pytest.mark.parametrize("bad", [{"statistic": "p"}, {"variance": "none"}])
+def test_offline_lira_rejects_unknown_options(bad):
+    target, membership, shadow_out = _few_shadow_scenario(2)
+    with pytest.raises(ValueError):
+        lira_offline_attack(target, membership, shadow_out, **bad)

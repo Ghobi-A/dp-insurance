@@ -142,12 +142,20 @@ def logit_confidence_from_bce(losses: np.ndarray, eps: float = 1e-12) -> np.ndar
     return np.log(p) - np.log1p(-p)
 
 
+#: Recognised options for the offline attack. The first of each is the default
+#: and reproduces the scores of every stored experiment exactly.
+OFFLINE_STATISTICS = ("raw_loss", "logit_confidence")
+OFFLINE_VARIANCES = ("per_example", "global")
+
+
 def lira_offline_attack(
     target_losses: np.ndarray,
     membership: np.ndarray,
     shadow_out_losses: np.ndarray,
     fprs=(0.001, 0.01, 0.1),
     eps: float = 1e-12,
+    statistic: str = "raw_loss",
+    variance: str = "per_example",
 ) -> AttackResult:
     """Offline Likelihood-Ratio Attack (Carlini et al. 2022).
 
@@ -167,17 +175,31 @@ def lira_offline_attack(
             from shadow models trained without it.
         fprs: False-positive rates at which to report TPR.
         eps: Floor on the fitted standard deviation for numerical stability.
+        statistic: ``"raw_loss"`` (default, the historical behaviour) fits the
+            Gaussians to cross-entropy; ``"logit_confidence"`` first applies
+            :func:`logit_confidence_from_bce`, the scale Carlini et al. fit on.
+        variance: ``"per_example"`` (default, the historical behaviour) or
+            ``"global"``, which pools the OUT variance over all examples.
+            Carlini et al. (§VI-A, "fixed variance") recommend the pooled
+            estimate when few shadow models are available, because a standard
+            deviation estimated from about ten losses is itself very noisy.
 
     Returns:
-        An :class:`AttackResult`.
+        An :class:`AttackResult`. ``method`` is ``"lira-offline"`` for the
+        defaults and names the options otherwise.
 
     Raises:
-        ValueError: On shape mismatches or fewer than 2 shadow samples.
+        ValueError: On shape mismatches, fewer than 2 shadow samples, or an
+            unknown ``statistic`` or ``variance``.
 
     Reference:
         Carlini, Chien, Nasr, Song, Terzis, Tramèr (2022). "Membership
         Inference Attacks From First Principles." IEEE S&P.
     """
+    if statistic not in OFFLINE_STATISTICS:
+        raise ValueError(f"unknown statistic {statistic!r}; expected one of {OFFLINE_STATISTICS}")
+    if variance not in OFFLINE_VARIANCES:
+        raise ValueError(f"unknown variance {variance!r}; expected one of {OFFLINE_VARIANCES}")
     target_losses = np.asarray(target_losses, dtype=float)
     membership = np.asarray(membership)
     shadow_out_losses = np.asarray(shadow_out_losses, dtype=float)
@@ -188,20 +210,32 @@ def lira_offline_attack(
     if shadow_out_losses.ndim != 2 or shadow_out_losses.shape[1] < 2:
         raise ValueError("shadow_out_losses must be (n, k) with k >= 2 shadow models")
 
-    mu_out = shadow_out_losses.mean(axis=1)
-    sigma_out = shadow_out_losses.std(axis=1, ddof=1)
+    # Orient the statistic so that a higher value is always more member-like.
+    if statistic == "logit_confidence":
+        target_stat = logit_confidence_from_bce(target_losses)
+        out_stat = logit_confidence_from_bce(shadow_out_losses)
+    else:
+        target_stat, out_stat = -target_losses, -shadow_out_losses
+
+    mu_out = out_stat.mean(axis=1)
+    if variance == "global":
+        # Pooled within-example variance: one sigma shared by every example.
+        sigma_out = np.full(n, np.sqrt(out_stat.var(axis=1, ddof=1).mean()))
+    else:
+        sigma_out = out_stat.std(axis=1, ddof=1)
     sigma_out = np.maximum(sigma_out, eps)
 
-    # Standardised deviation; a loss far below the "out" mean is member-like.
-    z = (target_losses - mu_out) / sigma_out
-    scores = -z  # higher score = more member-like
+    # Standardised deviation above the "out" mean; higher = more member-like.
+    scores = (target_stat - mu_out) / sigma_out
 
+    default = statistic == "raw_loss" and variance == "per_example"
     return AttackResult(
         auc=float(roc_auc_score(membership, scores)),
         tpr_at_fpr=_tpr_at_fpr(membership, scores, fprs),
         scores=scores,
         membership=membership,
-        method="lira-offline",
+        # The default keeps its historical name so stored results stay valid.
+        method="lira-offline" if default else f"lira-offline[{statistic},{variance}-variance]",
     )
 
 
