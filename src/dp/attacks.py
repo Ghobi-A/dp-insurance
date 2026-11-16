@@ -111,6 +111,41 @@ def loss_threshold_attack(
     )
 
 
+def _validate_attack_inputs(
+    target_losses: np.ndarray,
+    membership: np.ndarray,
+    shadow_losses: dict[str, np.ndarray],
+    require_nonnegative: bool,
+) -> None:
+    """Shared input checks for the LiRA variants.
+
+    Negative losses are rejected only when the logit-confidence transform is
+    requested: ``exp(-loss)`` would exceed 1 and be silently clipped. The
+    raw-loss statistic is a location-scale comparison and stays defined for any
+    finite score, which keeps historical callers valid.
+    """
+    if target_losses.ndim != 1 or membership.ndim != 1:
+        raise ValueError("target_losses and membership must be 1-D")
+    n = target_losses.shape[0]
+    if membership.shape[0] != n:
+        raise ValueError("target_losses and membership must align on axis 0")
+    if not np.isin(membership, (0, 1)).all():
+        raise ValueError("membership must be binary (0/1)")
+    arrays = {"target_losses": target_losses, **shadow_losses}
+    for name, values in arrays.items():
+        if name != "target_losses":
+            if values.ndim != 2 or values.shape[0] != n:
+                raise ValueError(f"{name} must be (n, k) and align with target_losses")
+            if values.shape[1] < 2:
+                raise ValueError(f"{name} must be (n, k) with k >= 2 shadow models")
+        if not np.isfinite(values).all():
+            raise ValueError(f"{name} must be finite")
+        if require_nonnegative and (values < 0).any():
+            raise ValueError(f"{name} must be non-negative for the logit-confidence statistic")
+    if np.unique(membership).size < 2:
+        raise ValueError("membership must contain both members and non-members")
+
+
 #: Recognised per-example statistics for the online attack.
 ONLINE_VARIANTS = ("online_raw_loss", "online_logit_confidence")
 
@@ -179,18 +214,24 @@ def lira_offline_attack(
             Gaussians to cross-entropy; ``"logit_confidence"`` first applies
             :func:`logit_confidence_from_bce`, the scale Carlini et al. fit on.
         variance: ``"per_example"`` (default, the historical behaviour) or
-            ``"global"``, which pools the OUT variance over all examples.
-            Carlini et al. (§VI-A, "fixed variance") recommend the pooled
-            estimate when few shadow models are available, because a standard
+            ``"global"``, which pools the within-example OUT variance over all
+            examples (example means are never pooled). Carlini et al. describe
+            a fixed variance for the few-shadow regime, because a standard
             deviation estimated from about ten losses is itself very noisy.
+            Pooling is not uniformly better: in the synthetic comparison in
+            :mod:`dp.lira_variance_simulation` it helps when examples share a
+            similar spread and hurts when per-example spreads differ strongly,
+            even at 11 shadows. Choose it in a protocol fixed before results.
 
     Returns:
         An :class:`AttackResult`. ``method`` is ``"lira-offline"`` for the
         defaults and names the options otherwise.
 
     Raises:
-        ValueError: On shape mismatches, fewer than 2 shadow samples, or an
-            unknown ``statistic`` or ``variance``.
+        ValueError: On shape mismatches, non-finite losses, non-binary or
+            single-class membership, fewer than 2 shadow samples, negative
+            losses with ``statistic="logit_confidence"``, or an unknown
+            ``statistic`` or ``variance``.
 
     Reference:
         Carlini, Chien, Nasr, Song, Terzis, Tramèr (2022). "Membership
@@ -204,11 +245,13 @@ def lira_offline_attack(
     membership = np.asarray(membership)
     shadow_out_losses = np.asarray(shadow_out_losses, dtype=float)
 
+    _validate_attack_inputs(
+        target_losses,
+        membership,
+        {"shadow_out_losses": shadow_out_losses},
+        require_nonnegative=statistic == "logit_confidence",
+    )
     n = target_losses.shape[0]
-    if membership.shape[0] != n or shadow_out_losses.shape[0] != n:
-        raise ValueError("target_losses, membership, shadow_out_losses must align on axis 0")
-    if shadow_out_losses.ndim != 2 or shadow_out_losses.shape[1] < 2:
-        raise ValueError("shadow_out_losses must be (n, k) with k >= 2 shadow models")
 
     # Orient the statistic so that a higher value is always more member-like.
     if statistic == "logit_confidence":
@@ -301,24 +344,17 @@ def lira_online_attack(
     shadow_in_losses = np.asarray(shadow_in_losses, dtype=float)
     shadow_out_losses = np.asarray(shadow_out_losses, dtype=float)
 
-    n = target_losses.shape[0]
-    aligned = (
-        membership.shape[0] == n
-        and shadow_in_losses.shape[0] == n
-        and shadow_out_losses.shape[0] == n
-    )
-    if not aligned:
-        raise ValueError(
-            "target_losses, membership, shadow_in_losses, shadow_out_losses must align on axis 0"
-        )
-    if shadow_in_losses.ndim != 2 or shadow_in_losses.shape[1] < 2:
-        raise ValueError("shadow_in_losses must be (n, k) with k >= 2 shadow models")
-    if shadow_out_losses.ndim != 2 or shadow_out_losses.shape[1] < 2:
-        raise ValueError("shadow_out_losses must be (n, k) with k >= 2 shadow models")
     if variant not in ONLINE_VARIANTS:
         raise ValueError(
             f"unknown variant {variant!r}; expected one of {sorted(ONLINE_VARIANTS)}"
         )
+
+    _validate_attack_inputs(
+        target_losses,
+        membership,
+        {"shadow_in_losses": shadow_in_losses, "shadow_out_losses": shadow_out_losses},
+        require_nonnegative=variant == "online_logit_confidence",
+    )
 
     if variant == "online_logit_confidence":
         # Applied identically to target, IN and OUT so the three are comparable.
