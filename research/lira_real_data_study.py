@@ -152,6 +152,53 @@ def _model_path(output_dir: Path, condition: str, index: int) -> Path:
     return output_dir / "models" / condition / f"model_{index:03d}.npz"
 
 
+def _validate_saved_model(
+    path: Path, *, condition: str, index: int, expected_members: np.ndarray,
+    seed: int, pilot: bool, epochs: int, data_hash: str,
+) -> tuple[np.ndarray, np.ndarray, dict[str, object]]:
+    """Fail closed on stale/corrupt checkpoints before resume or analysis.
+
+    A filename is not evidence that a model belongs to this experiment. In
+    particular, never silently reuse pilot models or files from another data
+    snapshot, condition, model index, or frozen protocol.
+    """
+    try:
+        with np.load(path, allow_pickle=False) as saved:
+            margins = saved["margins"]
+            members = saved["members"]
+            meta = json.loads(str(saved["meta"]))
+    except (OSError, ValueError, KeyError, TypeError, EOFError) as exc:
+        raise SystemExit(f"invalid saved model {path}: {exc}") from exc
+    if not isinstance(meta, dict):
+        raise SystemExit(f"invalid saved model {path}: metadata is not an object")
+
+    required = {
+        "condition": condition,
+        "model_index": index,
+        "design_seed": seed,
+        "pilot": pilot,
+        "epochs": epochs,
+        "seed": ls.model_seed(seed, index),
+        "protocol_hash": ls.protocol_hash(),
+        "data_sha256": data_hash,
+        "train_size": int(expected_members.sum()),
+    }
+    for key, value in required.items():
+        if meta.get(key) != value or (key == "pilot" and type(meta.get(key)) is not bool):
+            raise SystemExit(
+                f"saved model {path} has mismatched {key}; refusing to reuse it"
+            )
+    if members.shape != expected_members.shape or members.dtype != np.dtype(bool):
+        raise SystemExit(f"saved model {path} has invalid membership shape/type")
+    if not np.array_equal(members, expected_members):
+        raise SystemExit(f"saved model {path} has mismatched membership design")
+    if (margins.shape != (ls.N_RECORDS,)
+            or not np.issubdtype(margins.dtype, np.number)
+            or not np.isfinite(margins).all()):
+        raise SystemExit(f"saved model {path} has invalid/nonfinite margins")
+    return margins, members, meta
+
+
 def _train_one(job: tuple[str, int, str, int, bool, int, str]) -> tuple[str, int, float]:
     condition, index, output_dir, seed, pilot, epochs, data_hash = job
     import torch
@@ -183,18 +230,42 @@ def run_train(args: argparse.Namespace) -> None:
     total = ls.N_TARGETS + ls.N_SHADOWS
     indices = range(total) if args.models is None else range(args.models)
     _, _, data_hash = load_data()
-    jobs = [
-        (condition, index, str(output_dir), seed, bool(args.pilot), epochs, data_hash)
-        for condition in args.conditions
-        for index in indices
-        if not _model_path(output_dir, condition, index).exists()
-    ]
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "run_manifest.json").write_text(json.dumps({
-        "protocol": ls.protocol_dict(), "protocol_hash": ls.protocol_hash(),
-        "design_seed": seed, "pilot": bool(args.pilot), "epochs": epochs,
-        "data_sha256": data_hash, "runtime": runtime_versions(), "workers": args.workers,
-    }, indent=2, default=list))
+    manifest_path = output_dir / "run_manifest.json"
+    run_identity = {
+        "protocol_hash": ls.protocol_hash(), "design_seed": seed,
+        "pilot": bool(args.pilot), "epochs": epochs, "data_sha256": data_hash,
+    }
+    if manifest_path.exists():
+        try:
+            existing_manifest = json.loads(manifest_path.read_text())
+        except (ValueError, OSError) as exc:
+            raise SystemExit(f"invalid existing run manifest: {exc}") from exc
+        for key, value in run_identity.items():
+            if existing_manifest.get(key) != value:
+                raise SystemExit(f"existing run manifest has mismatched {key}; refusing resume")
+    else:
+        manifest_path.write_text(json.dumps({
+            "protocol": ls.protocol_dict(), **run_identity,
+            "runtime": runtime_versions(), "workers": args.workers,
+        }, indent=2, default=list))
+
+    # Validate existing artefacts rather than trusting filenames. This also
+    # detects mixed old/new runs before launching any new training workers.
+    design = ls.membership_matrix(seed)
+    jobs = []
+    for condition in args.conditions:
+        for index in indices:
+            path = _model_path(output_dir, condition, index)
+            if path.exists():
+                _validate_saved_model(
+                    path, condition=condition, index=index,
+                    expected_members=design[index], seed=seed, pilot=bool(args.pilot),
+                    epochs=epochs, data_hash=data_hash,
+                )
+            else:
+                jobs.append((condition, index, str(output_dir), seed,
+                             bool(args.pilot), epochs, data_hash))
     print(f"{len(jobs)} models to train ({total * len(args.conditions) - len(jobs)} reused)",
           flush=True)
     started = time.time()
@@ -213,21 +284,37 @@ def run_train(args: argparse.Namespace) -> None:
 def load_condition(input_dir: Path, condition: str, allow_pilot: bool):
     total = ls.N_TARGETS + ls.N_SHADOWS
     margins, members, metas = [], [], []
+    _, _, data_hash = load_data()
+    seed = None
+    pilot = None
+    epochs = None
+    design = None
     for index in range(total):
-        with np.load(_model_path(input_dir, condition, index)) as saved:
-            meta = json.loads(str(saved["meta"]))
-            margins.append(saved["margins"])
-            members.append(saved["members"])
-        if meta["pilot"] and not allow_pilot:
-            raise SystemExit("pilot measurements cannot enter the confirmatory analysis")
-        if not meta["pilot"] and meta["protocol_hash"] != ls.protocol_hash():
-            raise SystemExit("saved measurements were produced under a different protocol")
+        path = _model_path(input_dir, condition, index)
+        # Read only the first metadata record to establish whether this is
+        # a declared pilot; the shared validator checks each complete file.
+        if index == 0:
+            try:
+                with np.load(path, allow_pickle=False) as saved:
+                    first_meta = json.loads(str(saved["meta"]))
+            except (OSError, ValueError, KeyError, TypeError, EOFError) as exc:
+                raise SystemExit(f"invalid saved model {path}: {exc}") from exc
+            if not isinstance(first_meta, dict) or type(first_meta.get("pilot")) is not bool:
+                raise SystemExit(f"invalid saved model {path}: missing pilot marker")
+            pilot = first_meta["pilot"]
+            if pilot and not allow_pilot:
+                raise SystemExit("pilot measurements cannot enter the confirmatory analysis")
+            seed = ls.PILOT_SEED if pilot else ls.STUDY_SEED
+            epochs = first_meta.get("epochs") if pilot else ls.EPOCHS
+            design = ls.membership_matrix(seed)
+        margin, member, meta = _validate_saved_model(
+            path, condition=condition, index=index, expected_members=design[index],
+            seed=seed, pilot=pilot, epochs=epochs, data_hash=data_hash,
+        )
+        margins.append(margin)
+        members.append(member)
         metas.append(meta)
-    members = np.asarray(members)
-    seed = metas[0]["design_seed"]
-    if not np.array_equal(members, ls.membership_matrix(seed)):
-        raise SystemExit("saved membership does not match the protocol design")
-    return np.asarray(margins), members, metas
+    return np.asarray(margins), np.asarray(members), metas
 
 
 def analyse_condition(margins: np.ndarray, members: np.ndarray, groups: np.ndarray):
@@ -339,6 +426,21 @@ def run_analyse(args: argparse.Namespace) -> None:
     X, y, data_hash = load_data()
     groups = ls.duplicate_groups(X, y)
     manifest = json.loads((input_dir / "run_manifest.json").read_text())
+    pilot = manifest.get("pilot")
+    if type(pilot) is not bool:
+        raise SystemExit("run manifest is missing a valid pilot marker")
+    expected_identity = {
+        "protocol_hash": ls.protocol_hash(),
+        "data_sha256": data_hash,
+        "design_seed": ls.PILOT_SEED if pilot else ls.STUDY_SEED,
+    }
+    if not pilot:
+        expected_identity["epochs"] = ls.EPOCHS
+    elif not args.allow_pilot:
+        raise SystemExit("pilot measurements cannot enter the confirmatory analysis")
+    for key, expected in expected_identity.items():
+        if manifest.get(key) != expected:
+            raise SystemExit(f"run manifest has mismatched {key}; analysis refused")
     results: dict[str, object] = {
         "protocol_hash": ls.protocol_hash(), "pilot": bool(manifest["pilot"]),
         "data_sha256": data_hash, "runtime": manifest["runtime"],
