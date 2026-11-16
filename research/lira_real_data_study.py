@@ -199,6 +199,67 @@ def _validate_saved_model(
     return margins, members, meta
 
 
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _quarantine(output_dir: Path, path: Path, reason: str) -> Path:
+    """Move a rejected checkpoint aside and log it. Nothing is ever deleted."""
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    target = output_dir / "rejected" / path.parent.name / f"{path.stem}.{stamp}.npz"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    record = {"original_path": str(path.relative_to(output_dir)),
+              "quarantined_path": str(target.relative_to(output_dir)),
+              "sha256": _sha256(path), "reason": reason, "utc": stamp}
+    path.replace(target)
+    with (output_dir / "rejected_artifacts.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record) + "\n")
+    return target
+
+
+def run_inventory(args: argparse.Namespace) -> None:
+    """Read-only audit of every expected checkpoint; writes artifact_inventory.json."""
+    input_dir = Path(args.input_dir)
+    manifest = json.loads((input_dir / "run_manifest.json").read_text())
+    pilot = bool(manifest["pilot"])
+    seed = ls.PILOT_SEED if pilot else ls.STUDY_SEED
+    _, _, data_hash = load_data()
+    design = ls.membership_matrix(seed)
+    entries, counts = [], {"valid": 0, "missing": 0, "invalid": 0}
+    for condition in ls.CONDITIONS:
+        for index in range(ls.N_TARGETS + ls.N_SHADOWS):
+            path = _model_path(input_dir, condition, index)
+            entry: dict[str, object] = {"condition": condition, "model_index": index}
+            if not path.exists():
+                entry["status"] = "missing"
+            else:
+                entry["sha256"] = _sha256(path)
+                try:
+                    _, _, meta = _validate_saved_model(
+                        path, condition=condition, index=index, expected_members=design[index],
+                        seed=seed, pilot=pilot, epochs=int(manifest["epochs"]),
+                        data_hash=data_hash,
+                    )
+                    entry.update(status="valid", seconds=meta["seconds"],
+                                 achieved_epsilon=meta["achieved_epsilon"])
+                except SystemExit as exc:
+                    entry.update(status="invalid", reason=str(exc))
+            counts[str(entry["status"])] += 1
+            entries.append(entry)
+    rejected_log = input_dir / "rejected_artifacts.jsonl"
+    rejected = ([json.loads(line) for line in rejected_log.read_text().splitlines() if line]
+                if rejected_log.exists() else [])
+    stray = sorted(str(p.relative_to(input_dir)) for p in (input_dir / "models").rglob("*")
+                   if p.is_file() and not p.name.startswith("model_") or p.name.endswith(".tmp.npz"))
+    payload = {"protocol_hash": ls.protocol_hash(), "data_sha256": data_hash, "pilot": pilot,
+               "expected_models": len(entries), "counts": counts, "rejected": rejected,
+               "stray_files": stray, "models": entries}
+    (input_dir / "artifact_inventory.json").write_text(json.dumps(payload, indent=2))
+    print(json.dumps({"counts": counts, "rejected": len(rejected), "stray_files": stray}))
+    if args.require_complete and (counts["missing"] or counts["invalid"]):
+        raise SystemExit("inventory is not complete and valid")
+
+
 def _train_one(job: tuple[str, int, str, int, bool, int, str]) -> tuple[str, int, float]:
     condition, index, output_dir, seed, pilot, epochs, data_hash = job
     import torch
@@ -258,14 +319,19 @@ def run_train(args: argparse.Namespace) -> None:
         for index in indices:
             path = _model_path(output_dir, condition, index)
             if path.exists():
-                _validate_saved_model(
-                    path, condition=condition, index=index,
-                    expected_members=design[index], seed=seed, pilot=bool(args.pilot),
-                    epochs=epochs, data_hash=data_hash,
-                )
-            else:
-                jobs.append((condition, index, str(output_dir), seed,
-                             bool(args.pilot), epochs, data_hash))
+                try:
+                    _validate_saved_model(
+                        path, condition=condition, index=index,
+                        expected_members=design[index], seed=seed, pilot=bool(args.pilot),
+                        epochs=epochs, data_hash=data_hash,
+                    )
+                    continue
+                except SystemExit as exc:
+                    if not args.quarantine_invalid:
+                        raise
+                    _quarantine(output_dir, path, str(exc))
+            jobs.append((condition, index, str(output_dir), seed,
+                         bool(args.pilot), epochs, data_hash))
     print(f"{len(jobs)} models to train ({total * len(args.conditions) - len(jobs)} reused)",
           flush=True)
     started = time.time()
@@ -493,12 +559,18 @@ def main(argv: Sequence[str] | None = None) -> None:
     train.add_argument("--pilot", action="store_true")
     train.add_argument("--epochs", type=int, default=None, help="pilot only")
     train.add_argument("--models", type=int, default=None, help="pilot only: first N models")
+    train.add_argument("--quarantine-invalid", action="store_true",
+                       help="move invalid checkpoints to rejected/ (logged) and retrain them; "
+                            "default is to stop")
+    inventory = sub.add_parser("inventory")
+    inventory.add_argument("--input-dir", required=True)
+    inventory.add_argument("--require-complete", action="store_true")
     analyse = sub.add_parser("analyse")
     analyse.add_argument("--input-dir", required=True)
     analyse.add_argument("--conditions", nargs="+", default=list(ls.CONDITIONS), choices=ls.CONDITIONS)
     analyse.add_argument("--allow-pilot", action="store_true")
     args = parser.parse_args(argv)
-    (run_train if args.command == "train" else run_analyse)(args)
+    {"train": run_train, "inventory": run_inventory, "analyse": run_analyse}[args.command](args)
 
 
 if __name__ == "__main__":

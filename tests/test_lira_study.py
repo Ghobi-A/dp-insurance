@@ -285,3 +285,30 @@ def test_analysis_rejects_nonconfirmatory_manifest(tmp_path):
     }))
     with pytest.raises(SystemExit, match="mismatched data_sha256"):
         runner.main(["analyse", "--input-dir", str(tmp_path)])
+
+
+def test_quarantine_moves_and_logs_invalid_checkpoint_without_deleting(tmp_path):
+    path = _fake_saved_model(tmp_path, meta_patch={"data_sha256": "stale"})
+    original = path.read_bytes()
+    with pytest.raises(SystemExit, match="data_sha256"):  # default stays fail-closed
+        runner.main(["train", "--output-dir", str(tmp_path), "--pilot", "--epochs", "1",
+                     "--models", "1", "--conditions", "nonprivate"])
+    assert path.read_bytes() == original
+    target = runner._quarantine(tmp_path, path, "mismatched data_sha256")
+    assert not path.exists() and target.read_bytes() == original
+    record = json.loads((tmp_path / "rejected_artifacts.jsonl").read_text().splitlines()[0])
+    assert record["reason"] == "mismatched data_sha256"
+    assert record["quarantined_path"].startswith("rejected/nonprivate/model_000.")
+
+
+def test_inventory_is_read_only_and_classifies_checkpoints(tmp_path, capsys):
+    path = _fake_saved_model(tmp_path, meta_patch={"seconds": 1.0, "achieved_epsilon": None})
+    (tmp_path / "run_manifest.json").write_text(json.dumps(
+        {"pilot": True, "epochs": 1, "protocol_hash": ls.protocol_hash()}))
+    before = path.read_bytes()
+    with pytest.raises(SystemExit, match="not complete"):
+        runner.main(["inventory", "--input-dir", str(tmp_path), "--require-complete"])
+    inventory = json.loads((tmp_path / "artifact_inventory.json").read_text())
+    assert inventory["counts"] == {"valid": 1, "missing": 575, "invalid": 0}
+    assert inventory["models"][0]["status"] == "valid" and len(inventory["models"][0]["sha256"]) == 64
+    assert path.read_bytes() == before
