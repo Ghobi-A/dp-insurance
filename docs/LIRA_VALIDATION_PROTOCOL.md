@@ -1,6 +1,6 @@
 # Real-data LiRA validation — prospective protocol, version 1
 
-**Frozen 17 November 2026, before any confirmatory model was trained.**
+**Frozen 16 November 2026, before any confirmatory model was trained.** (Erratum: the first commit of this file said 17 November; the design seed 20261117 is unchanged.)
 Protocol hash (`dp.lira_study.protocol_hash()`):
 `326d8849cbb7dd7952975d7c42deed711c32a77226e26c83cac7c66d3797b4f1`.
 The constants in `src/dp/lira_study.py` are the protocol; the analysis refuses
