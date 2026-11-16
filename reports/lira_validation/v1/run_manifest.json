@@ -1,0 +1,97 @@
+{
+  "protocol": {
+    "protocol_version": 1,
+    "study_seed": 20261117,
+    "numeric_bounds": {
+      "age": [
+        18.0,
+        64.0
+      ],
+      "bmi": [
+        15.0,
+        55.0
+      ],
+      "children": [
+        0.0,
+        5.0
+      ]
+    },
+    "regions": [
+      "northeast",
+      "northwest",
+      "southeast",
+      "southwest"
+    ],
+    "high_cost_threshold": 9382.033,
+    "n_records": 1338,
+    "train_size": 669,
+    "hidden_units": [
+      128,
+      128,
+      64
+    ],
+    "epochs": 400,
+    "batch_size": 64,
+    "learning_rate": 0.001,
+    "max_grad_norm": 1.0,
+    "delta": 1e-05,
+    "conditions": [
+      "nonprivate",
+      "clip_only",
+      "dp_eps8",
+      "dp_eps2"
+    ],
+    "requested_epsilon": {
+      "dp_eps8": 8.0,
+      "dp_eps2": 2.0
+    },
+    "n_targets": 16,
+    "n_shadows": 128,
+    "shadow_counts": [
+      22,
+      64,
+      128
+    ],
+    "statistics": [
+      "raw_loss",
+      "logit_confidence"
+    ],
+    "variances": [
+      "per_example",
+      "global"
+    ],
+    "baseline": {
+      "statistic": "raw_loss",
+      "variance": "per_example",
+      "shadows": 22
+    },
+    "primary": {
+      "statistic": "logit_confidence",
+      "variance": "per_example",
+      "shadows": 128
+    },
+    "primary_condition": "dp_eps8",
+    "alpha": 0.05,
+    "fprs": [
+      0.001,
+      0.01,
+      0.1
+    ]
+  },
+  "protocol_hash": "326d8849cbb7dd7952975d7c42deed711c32a77226e26c83cac7c66d3797b4f1",
+  "design_seed": 20261117,
+  "pilot": false,
+  "epochs": 400,
+  "data_sha256": "388eff679557d08ac19f463d025de5e0b4adc482537c8456d19934d78621fd47",
+  "runtime": {
+    "python": "3.13.16",
+    "platform": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39",
+    "numpy": "2.5.4",
+    "torch": "2.14.1+cpu",
+    "opacus": "1.6.0",
+    "scikit-learn": "1.9.1",
+    "pandas": "3.0.6",
+    "scipy": "1.18.1"
+  },
+  "workers": 4
+}

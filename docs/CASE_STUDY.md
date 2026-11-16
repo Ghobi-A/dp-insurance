@@ -20,7 +20,7 @@ a change of population?
   Jagielski 2023, including the approximate-DP correction). The auditor runs as
   a regression test that fails the build if the DP-SGD noise path is broken.
 * Pre-registered experiments: a non-private attack-power control, a six-point
-  ε ladder (594 trained models), and an ACS Census decision audit with 1,240
+  ε ladder (594 trained models), a 576-model prospective LiRA validation, and an ACS Census decision audit with 1,240
   model fits on frozen protocols, with choices persisted before external test
   scoring.
 * More than 400 automated tests, artefact validators that recompute every
@@ -44,11 +44,18 @@ a change of population?
 
 ## What it does not show — and why that matters
 
-* **A failed attack is not privacy.** The frozen ladder rule detected leakage
-  at no finite ε. An independent power simulation shows that rule detects a
-  true AUC of 0.54 only about 12% of the time. An exploratory pooled analysis
-  of the same data suggests small residual leakage at every ε from 2 to 32. The
-  honest summary is "not powered to detect", not "private".
+* **A failed attack is not privacy.** An early three-seed study detected no
+  leakage under DP-SGD. A power simulation showed its rule would catch a true
+  AUC of 0.54 only about 12% of the time. A follow-up study, with its protocol
+  frozen before any model was trained (576 models, 16 targets per condition),
+  then detected small leakage at ε ≈ 8 and ε ≈ 2 (attack AUC about 0.53),
+  well inside what the formal guarantee allows.
+* **The better attack was not better here.** The literature-faithful LiRA
+  variant was the predeclared primary. It did not beat the simpler baseline
+  (ΔAUC +0.0015, 95% CI [−0.0022, +0.0052]). The gain in sensitivity came from
+  the experimental design, and that negative result is reported as such.
+* **No confident identification of individuals under DP-SGD.** True-positive
+  rates at 1% false positives were close to chance.
 * **The ε applies to prepared records, not raw ones.** Scaling, category
   vocabularies and the cost threshold are learned from private data outside
   the accountant, so the insurance models have no end-to-end raw-record
@@ -68,9 +75,11 @@ implementation: a DP-SGD loop that added no
 noise, mis-calibrated sensitivity, test-set threshold tuning, and invalid
 subgroup verdicts. An independent statistical review
 ([`STATISTICAL_REVIEW.md`](STATISTICAL_REVIEW.md)) reproduced the headline
-numbers and fixed reporting defects. It also identified the next steps: a
-powered confirmatory leakage test, a stronger reference attack, a valid
-equal-leakage test, and public preprocessing for end-to-end privacy.
+numbers and fixed reporting defects. Its main proposals — a powered leakage
+test and a stronger reference attack — were then carried out
+([`LIRA_VALIDATION_FINDINGS.md`](LIRA_VALIDATION_FINDINGS.md)). Remaining
+steps: replication on a second dataset, a valid equal-leakage test, and a
+design that supports an empirical ε lower bound.
 
 **Skills shown:** differential privacy accounting, membership-inference
 auditing, experimental design and pre-registration, permutation and simulation
