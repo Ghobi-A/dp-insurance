@@ -190,3 +190,98 @@ def test_analysis_on_synthetic_margins_recovers_planted_signal():
     assert diagnostics["duplicate_records_in_groups_larger_than_one"] >= 2
     contrast = runner.paired_contrast(per_target, "auc")
     assert contrast["n"] == ls.N_TARGETS
+
+
+def _fake_saved_model(tmp_path, *, condition="nonprivate", pilot=True, epochs=1,
+                      meta_patch=None, margins=None, members=None):
+    """Make a structurally valid checkpoint without running a training job."""
+    import hashlib
+
+    seed = ls.PILOT_SEED if pilot else ls.STUDY_SEED
+    expected_members = ls.membership_matrix(seed)[0]
+    meta = {
+        "condition": condition, "model_index": 0, "design_seed": seed,
+        "pilot": pilot, "epochs": epochs, "seed": ls.model_seed(seed, 0),
+        "protocol_hash": ls.protocol_hash(),
+        "data_sha256": hashlib.sha256((ROOT / "data" / "insurance.csv").read_bytes()).hexdigest(),
+        "train_size": int(expected_members.sum()),
+    }
+    if meta_patch:
+        meta.update(meta_patch)
+    path = runner._model_path(tmp_path, "nonprivate", 0)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        path, margins=np.zeros(ls.N_RECORDS) if margins is None else margins,
+        members=expected_members if members is None else members,
+        meta=json.dumps(meta),
+    )
+    return path
+
+
+@pytest.mark.parametrize(
+    ("patch", "error"),
+    [
+        ({"data_sha256": "not-the-data"}, "data_sha256"),
+        ({"protocol_hash": "not-the-protocol"}, "protocol_hash"),
+        ({"model_index": 1}, "model_index"),
+        ({"condition": "dp_eps2"}, "condition"),
+        ({"seed": -1}, "seed"),
+    ],
+)
+def test_resume_rejects_stale_checkpoint_identity(tmp_path, patch, error):
+    _fake_saved_model(tmp_path, meta_patch=patch)
+    with pytest.raises(SystemExit, match=error):
+        runner.main([
+            "train", "--output-dir", str(tmp_path), "--pilot",
+            "--epochs", "1", "--models", "1", "--conditions", "nonprivate",
+        ])
+
+
+def test_resume_rejects_nonfinite_checkpoint_margins(tmp_path):
+    margins = np.zeros(ls.N_RECORDS)
+    margins[4] = np.nan
+    _fake_saved_model(tmp_path, margins=margins)
+    with pytest.raises(SystemExit, match="nonfinite margins"):
+        runner.main([
+            "train", "--output-dir", str(tmp_path), "--pilot",
+            "--epochs", "1", "--models", "1", "--conditions", "nonprivate",
+        ])
+
+
+def test_resume_rejects_mismatched_membership_bitmap(tmp_path):
+    members = ls.membership_matrix(ls.PILOT_SEED)[0].copy()
+    members[0] = ~members[0]
+    _fake_saved_model(tmp_path, members=members)
+    with pytest.raises(SystemExit, match="membership design"):
+        runner.main([
+            "train", "--output-dir", str(tmp_path), "--pilot",
+            "--epochs", "1", "--models", "1", "--conditions", "nonprivate",
+        ])
+
+
+def test_resume_refuses_incompatible_run_manifest(tmp_path):
+    (tmp_path / "run_manifest.json").write_text(json.dumps({
+        "protocol_hash": "different", "design_seed": ls.PILOT_SEED, "pilot": True,
+        "epochs": 1, "data_sha256": "different",
+    }))
+    with pytest.raises(SystemExit, match="manifest has mismatched protocol_hash"):
+        runner.main([
+            "train", "--output-dir", str(tmp_path), "--pilot",
+            "--epochs", "1", "--models", "1", "--conditions", "nonprivate",
+        ])
+
+
+def test_analysis_checks_checkpoint_identity_before_metrics(tmp_path):
+    _fake_saved_model(tmp_path, meta_patch={"data_sha256": "different"})
+    with pytest.raises(SystemExit, match="mismatched data_sha256"):
+        runner.load_condition(tmp_path, "nonprivate", allow_pilot=True)
+
+
+def test_analysis_rejects_nonconfirmatory_manifest(tmp_path):
+    (tmp_path / "run_manifest.json").write_text(json.dumps({
+        "pilot": False, "protocol_hash": ls.protocol_hash(),
+        "data_sha256": "wrong-data", "design_seed": ls.STUDY_SEED,
+        "epochs": ls.EPOCHS,
+    }))
+    with pytest.raises(SystemExit, match="mismatched data_sha256"):
+        runner.main(["analyse", "--input-dir", str(tmp_path)])
